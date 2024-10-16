@@ -1,0 +1,8 @@
+1, How to enable spi on raspiberry pi
+    dtc -@ -I dts -O dtb -o  qcc730.dtbo qcc730.dts
+    cp qcc730.dtbo /boot/overlays/
+
+2, How to compile ko
+    make
+
+

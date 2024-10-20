@@ -32,6 +32,7 @@ struct htc_ring_desc {
 struct qcc730_device {
 	struct spi_device   *spi;
 	struct net_device   *ndev;
+	u8 mac_addr[QCC730_MAC_REGION_LEN];
     u8 spi_tx_buff[QCC730_SPI_MAX_TX_BUFF_LEN];
     u8 spi_rx_buff[QCC730_SPI_MAX_RX_BUFF_LEN];
     struct htc_ring_desc rings[QCC730_SPI_MAX_RING_NUM];
@@ -41,9 +42,10 @@ struct qcc730_device {
     u8 f2a_sring_wr_idx[QCC730_SPI_MAX_RING_NUM];
     struct mutex        spi_lock;
     struct work_struct	txrx_work;
+    struct work_struct	ctrl_work;
     struct sk_buff_head	txq;
     int irq;
-    int handler_state;
+    int state;
     int f2a_irq_pending;
     unsigned long flags;
 };
@@ -87,12 +89,15 @@ typedef union {
 typedef struct fermion_defaults {
 	uint32_t table_hdr; /* Table Header pattern for host verification */
 	uint16_t table_len; /* Table length for host verification */
-	uint16_t reserved1;
+	uint16_t reserved0;
 
 	uint16_t  ferm_maj_ver;  /* Fermion Major version for Host verification */
 	uint16_t  ferm_min_ver;  /* Fermion Minor version for Host verification */
 
-	uint8_t num_a2f_rings;  /* Number of rings supported in A2F direction  */
+	u8 mac_addr[QCC730_MAC_REGION_LEN];  /*Mac address of QCC730 device*/
+	uint16_t reserved1;
+	
+        uint8_t num_a2f_rings;  /* Number of rings supported in A2F direction  */
 	uint8_t num_f2a_rings;  /* Number of rings supported in F2A direction  */
 	uint16_t reserved2;
 
@@ -171,6 +176,13 @@ typedef enum {
     HTC_MSG_TYPE_MAX,
 } htc_msg_type;
 
+typedef enum {
+    QCC730_DEVICE_NOT_READY = -1,
+	QCC730_WIFI_DISCONNECT,
+	QCC730_WIFI_CONNECT,
+	QCC730_HANDLER_IDLE,
+	QCC730_HANDLER_BUSY,
+} qcc730_state;
 
 static int qcc730_spi_rd_sr(struct qcc730_device *qcc730, u32 *sr);
 
@@ -209,7 +221,7 @@ static int qcc730_spi_write_then_read(struct spi_device *spi,
 		local_buf = buf;
 	}
 
-        spi_message_init(&message);
+    spi_message_init(&message);
 	memset(x, 0, sizeof(x));
 	if (n_tx) {
 		x[0].len = n_tx;
@@ -390,7 +402,7 @@ static int qcc730_spi_a2f_rd(struct qcc730_device *qcc730, u32 addr, u8 *buff, u
     qcc730->spi_tx_buff[0] = QCC730_SPI_CMDCODE_FREAD;
     u32_to_big_endian(addr, &qcc730->spi_tx_buff[QCC730_SPI_CMDCODE_LEN]);
 
-    ret = qcc730_spi_write_then_read(qcc730->spi, qcc730->spi_tx_buff, QCC730_SPI_CMDCODE_LEN+QCC730_SPI_ADDR_LEN+QCC730_SPI_CMDCODE_FREAD_DUMMY_BYTES, buff, size+pad_bytes);
+    ret = spi_write_then_read(qcc730->spi, qcc730->spi_tx_buff, QCC730_SPI_CMDCODE_LEN+QCC730_SPI_ADDR_LEN+QCC730_SPI_CMDCODE_FREAD_DUMMY_BYTES, buff, size+pad_bytes);
     if (ret != 0) {
         printk(KERN_ERR "[%s][%d]: error %x\n", __func__, __LINE__, ret);
         return -1;
@@ -430,6 +442,11 @@ static int qcc730_spi_a2f_wr(struct qcc730_device *qcc730, u32 addr, u8 *buff, u
     }
 
     return 0;
+}
+
+static void qcc730_spi_rd_wlan_state(struct qcc730_device *qcc730)
+{    
+    qcc730_spi_a2f_rd(qcc730, QCC730_HTC_F2A_ASSERT_REASON_CODE, (u8 *)&(qcc730->state), sizeof(u32));
 }
 
 static void qcc730_ring_index_update(struct qcc730_device *qcc730)
@@ -485,22 +502,19 @@ static int qcc730_spi_ring_wr(struct qcc730_device *qcc730, u8 *data, u32 len, u
 
 static int qcc730_spi_ring_rd(struct qcc730_device *qcc730, u8 *data, u32 *len, u8 ring, htc_msg_type *type)
 {
-    //get sring_rd_idx and sring_wr_idx and check if ring full
-    //printk(KERN_INFO "ring[%hhx]: f2a rd/wr idx %hhx  %hhx\n", ring, qcc730->f2a_sring_rd_idx[ring], qcc730->f2a_sring_wr_idx[ring]);
-
     if (qcc730_f2a_ring_is_empty(qcc730, ring)) {
         printk(KERN_ERR "[%s][%d]: error ring %d empty\n", __func__, __LINE__, ring);
         return -1;
     }
 
-    //read element
+    /* read element */
     htc_ring_element_t elem;
     memset(&elem, 0, sizeof(elem));
     qcc730_spi_a2f_rd(qcc730, qcc730->rings[ring].f2a_base_addr + qcc730->rings[ring].f2a_elem_size*qcc730->f2a_sring_rd_idx[ring], (u8 *)&elem, sizeof(elem));
 
-    //printk(KERN_INFO "ring[%hhx] elem[%hhx]: addr %x, len %hx, type %hx\n", ring, qcc730->f2a_sring_rd_idx[ring], elem.addr, elem.len, elem.type);
+    /* printk(KERN_INFO "ring[%hhx] elem[%hhx]: addr %x, len %hx, type %hx\n", ring, qcc730->f2a_sring_rd_idx[ring], elem.addr, elem.len, elem.type); */
     
-    //read data
+    /* read data */
     *len = elem.len;
     *type = elem.type;
     qcc730_spi_a2f_rd(qcc730, elem.addr, data, elem.len);
@@ -516,13 +530,6 @@ static int qcc730_spi_ring_rd(struct qcc730_device *qcc730, u8 *data, u32 *len, 
     return 0;
 }
 
-#if 0
-static int qcc730_tx_wlan_cmd(struct qcc730_device *qcc730, u8 *cmd_str)
-{
-    return qcc730_spi_ring_wr(qcc730, cmd_str, strlen(cmd_str), QCC730_SPI_CTRL_RING_IDX, HTC_MSG_TYPE_COMMON);
-}
-#endif
-
 static int qcc730_tx_wlan_data(struct qcc730_device *qcc730, u8 *data, int len)
 {
     return qcc730_spi_ring_wr(qcc730, data, len, QCC730_SPI_DATA_RING_IDX, HTC_MSG_TYPE_COMMON);
@@ -530,48 +537,43 @@ static int qcc730_tx_wlan_data(struct qcc730_device *qcc730, u8 *data, int len)
 
 static int qcc730_htc_init(struct qcc730_device *qcc730)
 {
+    u32 sr;
+    u16 id;
+    u32 ferm_table_addr = 0;
 
-    mutex_lock(&qcc730->spi_lock);
-
-//qcc730_reset:
     qcc730_spi_nop(qcc730);
     qcc730_spi_wren(qcc730);
 
-    u32 sr;
     qcc730_spi_rd_sr(qcc730, &sr);
     printk(KERN_INFO "test sr: %x\n", sr);
 
-    u16 id;
     qcc730_spi_rd_id(qcc730, &id);
     printk(KERN_INFO "device id: %hx\n", id);
 
-#if 0
-    QCC730_SPI_SLAVE_REG_CONFIG_TYPE spi_slv_cfg;
-    qcc730_spi_rd_reg(qcc730, QCC730_SPI_SLAVE_REG_CONFIG, &spi_slv_cfg.reg);
-    printk(KERN_INFO "spi slv config: %x\n", spi_slv_cfg.reg);
-#endif
+	if (id != 0x907f) {
+		printk(KERN_INFO "invalid device id\n");
+		return -1;
+	}
 
-    u32 ferm_table_addr = 0;
     qcc730_spi_a2f_rd(qcc730, QCC730_HTC_TABLE_ADDR_HOLDER, (u8 *)&ferm_table_addr, sizeof(ferm_table_addr));
     
     printk(KERN_INFO "ferm_table_addr mem: %x\n", ferm_table_addr);
     fermion_defaults_t ferm_default_table; 
     qcc730_spi_a2f_rd(qcc730, ferm_table_addr, (u8 *)&ferm_default_table, sizeof(fermion_defaults_t));
-    //qcc730_spi_a2f_rd(qcc730, ferm_table_addr, (u8 *)&ferm_default_table, 65);
 
     if (ferm_default_table.table_hdr != 0xfe0defa) {
         printk(KERN_ERR "qcc730 init failed\n");
         qcc730_spi_reset(qcc730);
-       // goto qcc730_reset;
+        return -1;
     }
 
-    mutex_unlock(&qcc730->spi_lock);
+	qcc730_spi_rd_wlan_state(qcc730);
 
     printk(KERN_INFO "ferm_default_table: size %lu, hdr %x %hx, ferm_ver v%hx.%hx, rings %hhx %hhx\n", sizeof(fermion_defaults_t),
         ferm_default_table.table_hdr, ferm_default_table.table_len, ferm_default_table.ferm_maj_ver, ferm_default_table.ferm_min_ver, 
         ferm_default_table.num_a2f_rings, ferm_default_table.num_f2a_rings);
 
-    //ring 0 ctrl 
+    /* ring 0 ctrl */ 
     qcc730->rings[QCC730_SPI_CTRL_RING_IDX].a2f_base_addr = ferm_default_table.p_a2f_ring0_base;
     qcc730->rings[QCC730_SPI_CTRL_RING_IDX].a2f_read_idx_addr = ferm_default_table.p_a2f_ring0_read_idx;
     qcc730->rings[QCC730_SPI_CTRL_RING_IDX].a2f_write_idx_addr = ferm_default_table.p_a2f_ring0_write_idx;
@@ -584,7 +586,7 @@ static int qcc730_htc_init(struct qcc730_device *qcc730)
     qcc730->rings[QCC730_SPI_CTRL_RING_IDX].f2a_elem_size = ferm_default_table.f2a_ring0_elem_size;
     qcc730->rings[QCC730_SPI_CTRL_RING_IDX].f2a_elem_num = ferm_default_table.f2a_ring0_num_elems;
     
-    //ring 1 data
+    /* ring 1 data */
     qcc730->rings[QCC730_SPI_DATA_RING_IDX].a2f_base_addr = ferm_default_table.p_a2f_ring1_base;
     qcc730->rings[QCC730_SPI_DATA_RING_IDX].a2f_read_idx_addr = ferm_default_table.p_a2f_ring1_read_idx;
     qcc730->rings[QCC730_SPI_DATA_RING_IDX].a2f_write_idx_addr = ferm_default_table.p_a2f_ring1_write_idx;
@@ -596,8 +598,15 @@ static int qcc730_htc_init(struct qcc730_device *qcc730)
     qcc730->rings[QCC730_SPI_DATA_RING_IDX].f2a_write_idx_addr = ferm_default_table.p_f2a_ring1_write_idx;
     qcc730->rings[QCC730_SPI_DATA_RING_IDX].f2a_elem_size = ferm_default_table.f2a_ring1_elem_size;
     qcc730->rings[QCC730_SPI_DATA_RING_IDX].f2a_elem_num = ferm_default_table.f2a_ring1_num_elems;
-    
-    for (int i=0; i<QCC730_SPI_MAX_RING_NUM; i++)
+   
+    /*mac address*/ 
+    memcpy(qcc730->mac_addr, ferm_default_table.mac_addr, QCC730_MAC_REGION_LEN); 
+     int i;
+    for (i=0; i<QCC730_MAC_REGION_LEN; i++)
+    {    
+        printk(KERN_INFO "%02x", qcc730->mac_addr[i]);
+    } 
+   for (int i=0; i<QCC730_SPI_MAX_RING_NUM; i++)
         printk(KERN_INFO "ring[%d]: a2f: %x %x %x %x %x, f2a: %x %x %x %x %x\n", i, 
                 qcc730->rings[i].a2f_base_addr, qcc730->rings[i].a2f_read_idx_addr, qcc730->rings[i].a2f_write_idx_addr, qcc730->rings[i].a2f_elem_size, qcc730->rings[i].a2f_elem_num,
                 qcc730->rings[i].f2a_base_addr, qcc730->rings[i].f2a_read_idx_addr, qcc730->rings[i].f2a_write_idx_addr, qcc730->rings[i].f2a_elem_size, qcc730->rings[i].f2a_elem_num);
@@ -607,11 +616,25 @@ static int qcc730_htc_init(struct qcc730_device *qcc730)
     return 0;
 }
 
+static void qcc730_ctrl_work(struct work_struct *work) 
+{
+    struct qcc730_device *qcc730 = container_of(work, struct qcc730_device, ctrl_work);
+    
+    if (qcc730->state == QCC730_DEVICE_NOT_READY) {
+        if (qcc730_htc_init(qcc730) == 0)
+            eth_hw_addr_set(qcc730->ndev, qcc730->mac_addr);
+    } else {
+		qcc730_spi_rd_wlan_state(qcc730);
+	}
+
+	if (qcc730->state == QCC730_WIFI_CONNECT) {
+            netif_wake_queue(qcc730->ndev);
+	}
+}
 static void qcc730_tx(struct qcc730_device *qcc730)
 {
     while (skb_queue_len(&qcc730->txq) && (!qcc730_a2f_ring_is_full(qcc730, QCC730_SPI_DATA_RING_IDX))) {
         struct sk_buff *skb = skb_dequeue(&qcc730->txq);
-        //printk(KERN_INFO "tx data: %d bytes\n", skb->len);
         qcc730_tx_wlan_data(qcc730, skb->data, skb->len);
         dev_kfree_skb(skb);
         
@@ -631,7 +654,6 @@ static void qcc730_rx(struct qcc730_device *qcc730)
         skb_reserve(skb, NET_IP_ALIGN);
 
         qcc730_spi_ring_rd(qcc730, &skb->data[0], &skb_len, QCC730_SPI_DATA_RING_IDX, &skb_type);
-        //printk(KERN_INFO "rx data: %d bytes\n", skb_len);
         skb_put(skb, skb_len);
 
         skb->dev = qcc730->ndev;
@@ -643,9 +665,9 @@ static void qcc730_rx(struct qcc730_device *qcc730)
 static void qcc730_txrx_work(struct work_struct *work)
 {
     struct qcc730_device *qcc730 = container_of(work, struct qcc730_device, txrx_work);
-    qcc730->handler_state = 1;
+	
+    qcc730->state = QCC730_HANDLER_BUSY;
     mutex_lock(&qcc730->spi_lock);
-    //int irq_disabled = 0;
 HANDLER_START:
     qcc730_ring_index_update(qcc730);
     qcc730_tx(qcc730);
@@ -653,22 +675,25 @@ HANDLER_START:
 
     if (qcc730->f2a_irq_pending) {
         qcc730->f2a_irq_pending = 0;
-        //irq_disabled = 1; 
         goto HANDLER_START; 
     } 
     
     mutex_unlock(&qcc730->spi_lock);
-    qcc730->handler_state = 0;
+    qcc730->state = QCC730_HANDLER_IDLE;
 }
 
 static irqreturn_t qcc730_irq_handler(int irq, void *ndev)
 {
     struct qcc730_device *qcc730 = (struct qcc730_device*)netdev_priv(ndev);
 
-    if (qcc730->handler_state == 1) {
+    if (qcc730->state < QCC730_WIFI_CONNECT) {
+		schedule_work(&qcc730->ctrl_work); 
+		return IRQ_HANDLED;
+	} else if (qcc730->state == QCC730_HANDLER_BUSY) {
         qcc730->f2a_irq_pending = 1; 
         return IRQ_HANDLED; 
-    } 
+    }
+
     schedule_work(&qcc730->txrx_work);
     
     return IRQ_HANDLED;
@@ -681,11 +706,9 @@ static int qcc730_open(struct net_device *ndev)
     printk(KERN_DEBUG "[%s][%d]\n", __func__, __LINE__);
     ret = request_irq(ndev->irq, qcc730_irq_handler, IRQF_TRIGGER_FALLING, ndev->name, ndev);
     if (ret < 0) {
-	printk(KERN_INFO "request qcc730 irq failed %d %d\n", ndev->irq, IRQF_TRIGGER_FALLING);
+	    printk(KERN_INFO "request qcc730 irq failed %d %d\n", ndev->irq, IRQF_TRIGGER_FALLING);
         return ret; 
     }
-
-    //qcc730_reset
     
     netif_start_queue(ndev);
     netif_carrier_on(ndev);
@@ -699,8 +722,10 @@ static int qcc730_stop(struct net_device *ndev)
 
     printk(KERN_DEBUG "[%s][%d]\n", __func__, __LINE__);
 
-    netif_carrier_off(ndev);
-    netif_stop_queue(ndev);
+    netif_carrier_off(ndev);	
+    if (qcc730->state < QCC730_WIFI_CONNECT) {
+        netif_stop_queue(ndev);
+    }
     __skb_queue_purge(&qcc730->txq);
     cancel_work_sync(&qcc730->txrx_work);
 
@@ -713,10 +738,14 @@ static netdev_tx_t qcc730_start_xmit(struct sk_buff *skb, struct net_device *nde
     struct qcc730_device *qcc730 = (struct qcc730_device*)netdev_priv(ndev);
     netdev_tx_t ret = NETDEV_TX_OK;
 
+    if (qcc730->state < QCC730_WIFI_CONNECT) {
+        netif_stop_queue(ndev);
+	    return NETDEV_TX_BUSY;
+    }
+	
     if (skb_queue_len(&qcc730->txq) > TX_QUEUE_HIGH_WATER)
     {		
         netif_stop_queue(ndev);
-        //ret = NETDEV_TX_BUSY;
     } 
     skb_queue_tail(&qcc730->txq, skb);
     schedule_work(&qcc730->txrx_work);
@@ -732,74 +761,72 @@ static const struct net_device_ops qcc730_netdev_ops = {
 
 static int qcc730_probe(struct spi_device *spi)
 {
-        //unsigned chipid = 0;
-        int ret = 0;
+    int ret = 0;
 	struct qcc730_device *qcc730;
-        struct net_device *ndev;
+    struct net_device *ndev;
+	u8 addr[ETH_ALEN];
 
-        printk(KERN_INFO "qcc730_probe\n");
-        ndev = devm_alloc_etherdev(&spi->dev, sizeof(*qcc730));
-        if (!ndev) {
-                printk(KERN_INFO "failed to alloc ethernet device\n");
-                return -ENOMEM;
-        }		
-	SET_NETDEV_DEV(ndev, &spi->dev);
-        qcc730 = (struct qcc730_device*)netdev_priv(ndev);
+    printk(KERN_INFO "qcc730_probe\n");
+    ndev = devm_alloc_etherdev(&spi->dev, sizeof(*qcc730));
+    if (!ndev) {
+        printk(KERN_INFO "failed to alloc ethernet device\n");
+        return -ENOMEM;
+    }		
+    SET_NETDEV_DEV(ndev, &spi->dev);
+    qcc730 = (struct qcc730_device*)netdev_priv(ndev);
 	dev_set_drvdata(&spi->dev, qcc730);
 	qcc730->spi = spi;
 	qcc730->ndev = ndev;
 		
 	spi->mode = SPI_MODE_0;
-        if (spi_setup(spi)) {
-                printk(KERN_INFO "spi_setup fail\n");
-                ret = -ENOMEM;
-                goto ERR_NDEV;
-        }
+    if (spi_setup(spi)) {
+        printk(KERN_INFO "spi_setup fail\n");
+        ret = -ENOMEM;
+        goto ERR_NDEV;
+    }
 
 	mutex_init(&qcc730->spi_lock);
 	INIT_WORK(&qcc730->txrx_work, qcc730_txrx_work);
+	INIT_WORK(&qcc730->ctrl_work, qcc730_ctrl_work);
 	skb_queue_head_init(&qcc730->txq);
-	qcc730->handler_state = 0;
+	qcc730->state = QCC730_DEVICE_NOT_READY;
 	qcc730->f2a_irq_pending = 0;
 
-        //qcc730_soft_reset(db);
-
-        /* qcc730 probe */
-	qcc730_htc_init(qcc730);
-
-	{
-		u8 addr[ETH_ALEN];
+    /* qcc730 probe */
+	if (qcc730_htc_init(qcc730) == 0) {
+#if 0		
 		addr[0]=0xc4; 
 		addr[1]=0xcc; 
 		addr[2]=0x37; 
 		addr[3]=0xa0; 
 		addr[4]=0x08; 
 		addr[5]=0xe7; 
-		memset(addr, 0x08, sizeof(addr));//todo: get mac from qcc730
 		eth_hw_addr_set(ndev, addr);
-	}
-		
-        //strcpy(ndev->name, "eth1"); 
-        ndev->if_port     = IF_PORT_100BASET;
-        ndev->netdev_ops  = &qcc730_netdev_ops;
-        //ndev->ethtool_ops = &qcc730_ethtool_ops;
+#endif
+	    eth_hw_addr_set(ndev, qcc730->mac_addr);
+	} else {
+         	memset(addr, 0x08, sizeof(addr));
+	        eth_hw_addr_set(ndev, qcc730->mac_addr);
+        }	
+    ndev->if_port     = IF_PORT_100BASET;
+    ndev->netdev_ops  = &qcc730_netdev_ops;
 
 	ret = devm_register_netdev(&spi->dev, ndev);
-        if (ret) {
-                printk(KERN_INFO "failed to register network device\n");
-                goto ERR_NDEV;
-        }
+    if (ret) {
+        printk(KERN_INFO "failed to register network device\n");
+        goto ERR_NDEV;
+    }
 	ndev->irq = spi->irq;
-        printk(KERN_INFO "spi irq %d!\n", spi->irq);
-        printk(KERN_INFO "QCC730 Probe Suc!\n");
+    printk(KERN_INFO "spi irq %d!\n", spi->irq);
+    printk(KERN_INFO "QCC730 Probe Suc!\n");
 
         return 0;
 
 ERR_NDEV:
-        printk(KERN_INFO "ERR_NDEV!\n");
-        free_netdev(ndev);
+    printk(KERN_INFO "ERR_NDEV!\n");
+    free_netdev(ndev);
 
-        return ret;
+    return ret;
 }
 
 static void qcc730_remove(struct spi_device *spi)

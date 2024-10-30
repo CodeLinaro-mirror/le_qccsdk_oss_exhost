@@ -877,7 +877,7 @@ module_init(qcc730_init);
 module_exit(qcc730_exit);
 
 MODULE_DESCRIPTION("Qualcomm qcc730 network driver");
-MODULE_AUTHOR("Ruben <ryzhang@qti.qualcomm.com>");
-MODULE_LICENSE("GPL");
+MODULE_AUTHOR("Hit <callme5@163.com>");
+MODULE_LICENSE("Dual BSD/GPL");
 MODULE_ALIAS("spi:qcc730");
 

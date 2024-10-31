@@ -3,6 +3,7 @@
     cp qcc730.dtbo /boot/overlays/
 
 2, How to compile ko
-    make
+    a) add MODULE_LICENSE("Dual BSD/xxx") in qcc730.c, "xxx" means one valid license of Linux Kernel module. 
+    b) make
 
 

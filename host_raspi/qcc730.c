@@ -878,6 +878,5 @@ module_exit(qcc730_exit);
 
 MODULE_DESCRIPTION("Qualcomm qcc730 network driver");
 MODULE_AUTHOR("Hit <callme5@163.com>");
-MODULE_LICENSE("Dual BSD/GPL");
 MODULE_ALIAS("spi:qcc730");
 

@@ -1,0 +1,42 @@
+/dts-v1/;
+/plugin/;
+
+/ {
+    compatible = "brcm,bcm2835";
+
+    fragment@0 {
+        target = <&gpio>;
+        __overlay__ {
+            gpio21: gpio21 {
+                brcm,pins = <21>;
+                brcm,function = <0>;
+                brcm,pull = <2>;
+            };
+        };
+    };
+
+    fragment@1 {
+        target = <&spi0>;
+        __overlay__ {
+            #address-cells = <1>;
+            #size-cells = <0>;
+            status = "okay";
+
+            spidev@0{
+                status = "disabled"; 
+            };
+           
+            eth1:qcc730@0 {
+                compatible = "qualcomm,qcc730";
+                reg = <0>;  // SPI chip select 0
+                pinctrl-names = "default"; 
+                pinctrl-0 = <&gpio21>; 
+                spi-max-frequency = <25000000>; // Adjust as per your device's specifications
+                
+                interrupt-parent = <&gpio>;
+                interrupts = <21 2>;
+                status = "okay";
+            };
+        };
+    };
+};

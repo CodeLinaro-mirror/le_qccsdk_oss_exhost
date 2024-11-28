@@ -27,6 +27,174 @@
 
 uint32_t qcspi_ring_init_flag = 0;
 
+#ifdef ATCMD_TXRX_ENABLE
+#define ATBUF_LEN	1400
+#define ATCMD_MAX_RETRY	100
+
+#define ATCMD_TXRX_OK                  0
+#define ATCMD_RX_TIMEOUT              -1
+#define ATCMD_RX_BUF_NOT_LONG_ENOUGH  -2
+
+uint8_t atcmd_rx_buf[1400] = {0};
+uint8_t atcmd_tx_buf[1400] = {0};
+
+typedef struct at_cmd_s
+{
+   const char              *cmd_str;   /**< String representation of the command. */
+   const char              *help_str;   /**< String representation of the command. */
+} at_cmd_t;
+
+at_cmd_t atcmd_list[] = {
+	{"+CMD",	   ""},
+	{"+GMR",	   "AT+GMR"},
+	{"+INFO",	   "AT+INFO"},
+	{"+RST",	   "RST"},
+	{"+WRTMEM",    "AT+WRTMEM: <addr>,<size:1|2|4>,<value>"},
+	{"+RDMEM",	   "+RDMEM: <addr>,<size:1|2|4>"},
+};
+
+uint32_t atcmd_list_size = sizeof(atcmd_list)/sizeof(at_cmd_t);
+
+void atcmd_help(int argc, char ** argv)
+{
+    int i;
+    if (argc == 1) 
+	{
+		for(i=0; i<atcmd_list_size; i++)
+		{
+		    printf("%s\r\n", atcmd_list[i].cmd_str);
+		}
+	} else {
+		for(i=0; i<atcmd_list_size; i++)
+		{
+		    if (memcmp(atcmd_list[i].cmd_str, argv[1], sizeof(atcmd_list[i].cmd_str)) == 0)
+		    {
+		        printf("%s\r\n", atcmd_list[i].help_str);
+				break;
+		    }
+		}
+		if (i == atcmd_list_size)
+		{
+		    printf("Invalid cmd %s\r\n", argv[0]);
+		}
+	}
+	
+}
+
+int32_t qapi_atcmd_send(uint8_t *cmd, uint32_t len)
+{
+ 	uint8_t cmd_buf[ATBUF_LEN]={0};
+	uint32_t sent_len = 0;
+
+    printf("atcmd send: %d %s\r\n", len ,cmd);
+    while(len >= ATBUF_LEN)
+    {
+        memcpy(&atcmd_tx_buf[0], cmd+sent_len, ATBUF_LEN);
+		if(qapi_spi_ring_write((uint8_t *)&atcmd_tx_buf[0], ATBUF_LEN, A2F_DATA_RING_ID, CONFIG_INFO_HFC))
+		{
+			demo_print("qapi_spi_ring_write error\r\n");
+		}
+
+		len -= ATBUF_LEN;
+		sent_len += ATBUF_LEN;
+    }
+
+    if (len)
+    {        
+        memcpy(&atcmd_tx_buf[0], cmd+sent_len, len);
+		if(qapi_spi_ring_write((uint8_t *)&atcmd_tx_buf[0], len, A2F_DATA_RING_ID, CONFIG_INFO_HFC))
+		{
+			demo_print("qapi_spi_ring_write error\r\n");
+		}		
+    }
+
+    return 0;	
+}
+
+/*timeout in ms*/
+int32_t qapi_atcmd_recv(uint8_t *buffer, uint16_t *buf_len, uint32_t timeout)
+{
+	uint8_t max_retry_cnt = ATCMD_MAX_RETRY;
+	uint8_t retry_cnt = 0;
+	uint8_t unread= 0;
+	uint16_t info_type;
+    uint16_t data_len = 0;
+	
+    max_retry_cnt = timeout/100;
+	
+    do
+	{
+        if (qapi_spi_ring_ready(F2A_DATA_RING_ID, &unread, &data_len) > 0)
+        {
+			break;
+        }
+        retry_cnt++;
+		QC_DELAY(100);
+    }while (retry_cnt < max_retry_cnt);
+
+    if (retry_cnt >= max_retry_cnt)
+    {
+        //printf("qapi_atcmd_recv timeout\r\n");
+		return ATCMD_RX_TIMEOUT;
+    }
+
+	if (data_len > *buf_len)
+	{
+        printf("buffer is not enough %d > %d!\r\n", data_len > *buf_len);
+	    return ATCMD_RX_BUF_NOT_LONG_ENOUGH;
+	}
+	
+	if(qapi_spi_ring_read(buffer, buf_len, F2A_DATA_RING_ID, &info_type))
+		demo_print("qapi_spi_ring_read error\r\n");
+
+	return ATCMD_TXRX_OK;
+}
+
+void atcmd_txrx_handler(uint8_t *cmd, uint32_t len)
+{
+    uint16_t buf_len = ATBUF_LEN;	
+	int32_t  ret = 0;
+	
+	if (NULL == cmd || 1 >= len )
+    {
+        return;
+    }
+	
+    if (0 == qcspi_ring_init_flag)
+    {   
+    	qapi_spi_ring_init();
+        qcspi_ring_init_flag = 1;
+    }
+
+    qapi_atcmd_send(cmd, len);
+	
+	memset(atcmd_rx_buf, 0, ATBUF_LEN);
+	ret = qapi_atcmd_recv(atcmd_rx_buf, &buf_len, 10000);
+	if (ATCMD_RX_TIMEOUT == ret)
+	{
+	    printf("atcmd rx timeout!\r\n");
+	}
+	else
+	{
+		//atcmd_rx_buf[buf_len] = '\r';
+	    printf("resp %d:\r\n %s\r\n", buf_len, &atcmd_rx_buf[0]);
+	}
+
+	do
+	{
+	    buf_len = ATBUF_LEN;
+		memset(atcmd_rx_buf, 0, ATBUF_LEN);		
+		ret = qapi_atcmd_recv(atcmd_rx_buf, &buf_len, 2000);
+		if (ATCMD_TXRX_OK == ret)
+		{
+			//atcmd_rx_buf[buf_len] = '\r';
+			printf("%s\r\n", &atcmd_rx_buf[0]);		    
+		}
+		
+	}while (ATCMD_RX_TIMEOUT != ret);
+}
+#endif 
+
 #ifdef DEMO_TXRX_TEST
 static void app_txrx_demo(uint32_t num, uint32_t size)
 {
@@ -686,7 +854,8 @@ void vTaskShell(void * p) {
 
 	cmd_shell_add("stop", (void*)test_qcspi_stop, "stop [mode=0/1/2]");
 	cmd_shell_add("reset", (void*)test_qcspi_reset, "reset(chip_on pin wired)");
-	cmd_shell_add("wk", (void*)test_wakeup_reset, "wakeup");
+	cmd_shell_add("wk", (void*)test_wakeup_reset, "wakeup");	
+	cmd_shell_add("help", (void*)atcmd_help, "AT Command help!");
 
 	while(1){
 		cmd_shell_char_received();

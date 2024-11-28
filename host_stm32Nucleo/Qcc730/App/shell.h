@@ -15,6 +15,7 @@
 #include "FreeRTOS.h"
 #include "queue.h"
 
+#define ATCMD_TXRX_ENABLE
 
 extern UART_HandleTypeDef huart1;
 #define UART_DEVICE huart1

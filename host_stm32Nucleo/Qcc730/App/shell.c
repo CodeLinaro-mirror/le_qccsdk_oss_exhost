@@ -62,8 +62,9 @@ uint8_t cmd_shell_init(UART_HandleTypeDef* huart) {
 
 	uart_write(starting,sizeof(starting));
 	uart_write(prompt,sizeof(prompt));
-
+#ifndef ATCMD_TXRX_ENABLE
 	cmd_shell_add("help", (void *)cmd_sh_help, "show help");
+#endif
 //	cmd_shell_add("Eg:", (void *)cmd_sh_example, "Example");
 
 	qShell = xQueueCreate(1,sizeof(char));
@@ -93,9 +94,18 @@ uint8_t cmd_shell_char_received() {
 	case '\r':
 		// ENTER key pressed
 		printf("\r\n");
-		buf[pos++] = 0;
-		pos = 0;
+		buf[pos++] = '\r';
+#ifdef ATCMD_TXRX_ENABLE
+    if (strncmp(buf, "help", 4) == 0) {        
 		cmd_shell_exec(buf);
+    } else if (buf[0] != '\r') {	
+    	extern void atcmd_txrx_handler(uint8_t *cmd, uint32_t len);
+        atcmd_txrx_handler(buf, pos-1);
+	}
+#else
+		cmd_shell_exec(buf);
+#endif
+		pos = 0;
 		uart_write(prompt,sizeof(prompt));
 		break;
 
@@ -127,6 +137,9 @@ uint8_t cmd_shell_exec(char * cmd) {
 	int h = 0;
 
 	while(cmd[h] != ' ' && h < SHELL_CMD_MAX_SIZE){
+		if (cmd[h] == '\r')
+			break;
+		
 		header[h] = cmd[h];
 		h++;
 	}
@@ -148,7 +161,8 @@ uint8_t cmd_shell_exec(char * cmd) {
 			return shell_func_list[i].func(argc, argv);
 		}
 	}
-	printf("%s: command not found\r\n", cmd);
+
+	//printf("%s: command not found\r\n", cmd);
 	return -1;
 }
 

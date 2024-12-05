@@ -98,7 +98,7 @@ static int32_t sw_ring_wait_for_F2A(uint32_t handle, sw_ring_status_t* ringStatu
 
         if (buffer_status_try_cnt == SW_RING_STATUS_RETRY_LIMIT)
         {
-            printf("%s failed, stop writing! len=%d\r\n", __FUNCTION__, len);
+            //printf("%s failed, stop writing! len=%d\r\n", __FUNCTION__, len);
             return RING_ERROR;
         }
 
@@ -516,6 +516,7 @@ int32_t sw_ring_init_table(uint32_t handle)
     {
         RING_LOG("%s: table_hdr=0x%08X failed, FERM_TABLE_HDR_PATTERN=0x%08X.\r\n", __FUNCTION__, gp_ferm_default_table.table_hdr, FERM_TABLE_HDR_PATTERN);
 //        SW_RING_ASSERT_OR_RETURN(-1);
+        return -1;
     }
 
     RING_LOG("%s: ferm_maj_ver=0x%08X.\r\n", __FUNCTION__, gp_ferm_default_table.ferm_maj_ver);

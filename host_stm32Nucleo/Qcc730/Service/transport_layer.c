@@ -14,7 +14,7 @@
 #include "led.h"
 #include "transport_layer.h"
 #include "qapi_spi.h"
-
+#include "qcc730_config.h"
 
 #define TX_TO_SLAVE_QUEUE_SIZE               5
 #define RX_FROM_SLAVE_QUEUE_SIZE             5
@@ -365,11 +365,16 @@ void F2A_int_handler()
 	 * This should be from GPIO event as designed. TODO......
 	 * */
 	int_count++;
+#ifdef QCC730_ATCMD_ENABLE
+    extern void qapi_atcmd_release_semp(void);
+    qapi_atcmd_release_semp();
+#else	
 	//printf("[%d]osSemaphoreRelease ready=%d sem count=%d\r\n",int_count,gpio_rx_data_ready,osSemaphoreGetCount(osSemaphore));
 	if (osSemaphore != NULL) {
 
 		osSemaphoreRelease(osSemaphore);
 
 	}
+#endif
 }
 

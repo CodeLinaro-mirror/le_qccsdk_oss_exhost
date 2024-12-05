@@ -33,7 +33,7 @@ int32_t qapi_spi_ring_read(uint8_t *buf, uint16_t *read_len, uint8_t ring_id, ui
 	//retval = sw_ring_read_buffer_new(spi_handle, buf, read_len, ring_id, info);
     if( (retval!= RING_OK) && (retval!=RING_EMPTY) )
     {
-    	printf("ERROR: qapi_spi_ring_read failed ringid=%d, ret %d!\r\n", ring_id,retval);
+    	//printf("ERROR: qapi_spi_ring_read failed ringid=%d, ret %d!\r\n", ring_id,retval);
         return retval;
     }
 	return retval;

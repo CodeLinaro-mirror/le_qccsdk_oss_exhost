@@ -96,10 +96,10 @@ uint8_t cmd_shell_char_received() {
 		// ENTER key pressed
 		printf("\r\n");
 #ifdef QCC730_ATCMD_ENABLE
-		buf[pos++] = '\r';
     if (strncmp(buf, "help", 4) == 0) {        
 		cmd_shell_exec(buf);
-    } else if (buf[0] != '\r') {	
+    } else if (buf[0] != '\r') {
+	    buf[pos++] = '\r';
     	extern void qcc730_atcmd_send_handler(uint8_t *cmd, uint32_t len);
         qcc730_atcmd_send_handler(buf, pos);
 	}

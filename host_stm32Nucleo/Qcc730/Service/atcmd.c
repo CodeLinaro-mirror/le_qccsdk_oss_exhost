@@ -15,6 +15,14 @@
 
 qcc730_atcmd_t *qcc730_atcmd = NULL;
 
+void atcmd_set_spi_ready(void)
+{
+    if (qcc730_atcmd)
+    {
+        qcc730_atcmd->spi_state = QCC730_SPI_READY;
+    }
+}
+
 void qcc730_atcmd_spi_trans_task(void * pvParameters)
 {
 	atcmd_print("enter atcmd task\r\n");	

@@ -13,9 +13,11 @@
 #ifdef SHELL_FEATURE
 #include "shell.h"
 #endif
+#include "qcc730_config.h"
 #include "qapi_spi.h"
 #include "qapi_atcmd.h"
 
+#ifdef QCC730_ATCMD_ENABLE
 void atcmd_help(int argc, char ** argv)
 {
     printf("AT+CMD?\r\n");
@@ -45,7 +47,6 @@ void qcc730_atcmd_send_handler(uint8_t *cmd, uint32_t len)
     	    printf("qcspi init failed, please try it again!\r\n");
 			return;
     	}
-		qapi_atcmd_set_spi_state(QCC730_SPI_READY);
     }
 
     qapi_atcmd_send(cmd, len);
@@ -56,7 +57,6 @@ void qcc730_atcmd_recv_callback(uint8_t *data, uint32_t len)
 {    
 	printf("%s", data);
 }
-
 
 #ifdef SHELL_FEATURE
 
@@ -102,4 +102,4 @@ void qcc730_atcmd_F2A_int_handler()
     qapi_atcmd_release_semp();
 }
 #endif
-
+#endif

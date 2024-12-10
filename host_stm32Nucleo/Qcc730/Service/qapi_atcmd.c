@@ -21,20 +21,14 @@ int32_t qapi_atcmd_get_spi_state(void)
     return QCC730_SPI_NOT_READY;
 }
 
-void qapi_atcmd_set_spi_state(qcc730_spi_state state)
-{
-    if (qcc730_atcmd)
-    {
-        qcc730_atcmd->spi_state = state;
-    }
-}
-
-void qapi_atcmd_set_recv_cb(qapi_atcmd_recv_callback callback)
+int32_t qapi_atcmd_set_recv_cb(qapi_atcmd_recv_callback callback)
 {
     if (qcc730_atcmd)
     {
         qcc730_atcmd->recv_cb= callback;
+		return QAPI_OK;
     }
+	return QAPI_ERROR;
 }
 
 void qapi_atcmd_release_semp(void)
@@ -56,6 +50,7 @@ int32_t qapi_atcmd_send(uint8_t *cmd, uint32_t len)
 		if(qapi_spi_ring_write(txbuf, ATCMD_BUF_LEN, A2F_DATA_RING_ID, CONFIG_INFO_HFC))
 		{
 			atcmd_print("qapi_spi_ring_write error\r\n");
+			return QAPI_ERROR;
 		}
 
 		len -= ATCMD_BUF_LEN;
@@ -71,7 +66,7 @@ int32_t qapi_atcmd_send(uint8_t *cmd, uint32_t len)
 		}		
     }
 
-    return 0;	
+    return QAPI_OK;	
 }
 
 void qapi_atcmd_init()

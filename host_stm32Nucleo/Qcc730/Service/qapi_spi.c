@@ -6,6 +6,10 @@
 #include <ring.h>
 #include <qapi_spi.h>
 
+#ifdef QCC730_ATCMD_ENABLE
+extern void atcmd_set_spi_ready(void);
+#endif
+
 int32_t qapi_spi_ring_write(uint8_t *buf, uint16_t write_len, uint8_t ring_id, uint16_t info)
 {
     uint32_t spi_handle = 0; //0 for current
@@ -70,5 +74,13 @@ void qapi_spi_init( void )
 
 int32_t qapi_spi_ring_init( void )
 {
-	return ring_init();
+    int32_t ret = 0;
+	ret = ring_init();
+#ifdef QCC730_ATCMD_ENABLE
+    if (ret == 0)
+    {
+        atcmd_set_spi_ready();
+    }
+#endif
+    return ret;
 }

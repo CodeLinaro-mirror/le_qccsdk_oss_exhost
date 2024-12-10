@@ -17,7 +17,7 @@
 #endif
 #include "qcc730_config.h"
 
-#ifndef QCC730_ATCMD_ENABLE
+#ifdef QCC730_SPI_DEMO_ENABLE
 #define demo_print printf
 
 #define DEMO_RAW_SPI_TEST

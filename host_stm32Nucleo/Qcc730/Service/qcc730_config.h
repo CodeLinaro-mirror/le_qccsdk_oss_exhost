@@ -7,5 +7,5 @@
 #define QCC730_CONFIG_H_
 
 #define QCC730_ATCMD_ENABLE
-
+//#define QCC730_SPI_DEMO_ENABLE
 #endif

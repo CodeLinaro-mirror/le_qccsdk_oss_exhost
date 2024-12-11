@@ -27,5 +27,7 @@ uint8_t cmd_shell_init(UART_HandleTypeDef* huart);
 uint8_t cmd_shell_add(char * cmd, int (* pfunc)(int argc, char ** argv), char * description);
 uint8_t cmd_shell_char_received();
 uint8_t cmd_shell_exec(char * cmd);
+uint8_t cmd_shell_find_command_index(int *index, char *header, int len);
+uint8_t cmd_shell_exec_function_by_index(int argc, char * argv, int index);
 
 #endif /* INC_SHELL_H_ */

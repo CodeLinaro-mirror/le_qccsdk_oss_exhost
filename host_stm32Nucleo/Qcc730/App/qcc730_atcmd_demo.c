@@ -18,9 +18,103 @@
 #include "qapi_atcmd.h"
 
 #ifdef QCC730_ATCMD_ENABLE
+#define AT_ARGC_MAX      128
+#define AT_CMD_MAX_SIZE  16
+
+int qat_demo_parser_enable = 1;
 void atcmd_help(int argc, char ** argv)
 {
     printf("AT+CMD?\r\n");
+}
+
+void atcmd_RDMEM(int argc, char ** argv)
+{
+	printf("+RDMEM\r\n");
+	printf("addr = %s\r\n", argv[0]);
+	printf("size = %s\r\n", argv[1]);
+	printf("value(hex) = %s\r\n", argv[2]);
+	printf("value(dec) = %s\r\n", argv[3]);
+	printf("status = %s\r\n", argv[3]);
+}
+
+void atcmd_CIPDHCPV4C(int argc, char ** argv)
+{
+	printf("+CIPDHCPV4C\r\n");
+	printf("IP = %s\r\n", argv[0]);
+	printf("Gateway = %s\r\n", argv[1]);
+	printf("Mask = %s\r\n", argv[2]);
+	printf("DNS0 = %s\r\n", argv[3]);
+	printf("DNS1 = %s\r\n", argv[4]);
+}
+
+uint8_t atcmd_response_handler(uint16_t buf_len, char * cmd) {
+	int argc;
+	char * argv[AT_ARGC_MAX]={0};
+	char *p;
+	int comma_found=0;
+	int func_found=0;
+	// Separating header and arguments
+	char header[AT_CMD_MAX_SIZE] = "";
+	int i = 0;
+	int h = 0;
+	int arg_start = 0;
+
+	for (i=0;i<buf_len;i++)
+	{
+		if (cmd[i] == '\r' || cmd[i] == '\0' || cmd[i] == '\n')
+		{
+			continue;
+		}
+		if (cmd[i] == ':')
+		{
+			break;
+		}
+		header[h] = cmd[i];
+		h++;
+	}
+	header[h] = '\0';
+	arg_start = i;
+	// Searching for the command and parameters
+	if(0 == cmd_shell_find_command_index(&i, header, h))
+	{
+		printf("Response before parsing:\r\n");
+		printf("%s\r\n", cmd);
+
+		argc = 1;
+		cmd += arg_start+1;
+		argv[0] = cmd;
+		func_found = 1;
+		for(p = cmd ; *p != '\0' && argc < AT_ARGC_MAX ; p++)
+		{
+			if(*p == '\r')
+			{
+				if(*(p+1) == '\n')
+				{
+					*p = '\0';
+					p++;
+				}
+				*p = '\0';
+				argv[argc] = p+1;
+			}
+			else if(*p == ',') {
+				*p = '\0';
+				argv[argc] = p+1;
+				argc++;
+			}
+			else {
+				;
+			}
+		}
+		printf("Response after parsing:\r\n");
+		return cmd_shell_exec_function_by_index(argc, argv, i);
+	}
+	else
+	{
+		printf("%s\r\n", cmd);
+		return 0;
+	}
+	
+	return -1;
 }
 
 void qcc730_atcmd_send_handler(uint8_t *cmd, uint32_t len)
@@ -55,7 +149,10 @@ void qcc730_atcmd_send_handler(uint8_t *cmd, uint32_t len)
 
 void qcc730_atcmd_recv_callback(uint8_t *data, uint32_t len)
 {    
-	printf("%s", data);
+	if(qat_demo_parser_enable == 0)
+		printf("%s", data);
+	else
+		atcmd_response_handler(len, data);
 }
 
 #ifdef SHELL_FEATURE
@@ -65,7 +162,8 @@ void qcc730_atcmd_recv_callback(uint8_t *data, uint32_t len)
 void vTaskShell(void * p) {
 	cmd_shell_init(&(UART_DEVICE));
 	cmd_shell_add("help", (void*)atcmd_help, "AT Command help!");
-
+	cmd_shell_add("+RDMEM", (void*)atcmd_RDMEM, "parse RDMEM response");
+	cmd_shell_add("+CIPDHCPV4C", (void*)atcmd_CIPDHCPV4C, "parse CIPDHCPV4C response");
 	while(1){
 		cmd_shell_char_received();
 	}

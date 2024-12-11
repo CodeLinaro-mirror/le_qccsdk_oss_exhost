@@ -16,7 +16,7 @@ typedef struct{
 #define SHELL_FUNC_LIST_MAX_SIZE 12
 #define SHELL_CMD_MAX_SIZE 8
 #define SHELL_ARGC_MAX 4
-#define SHELL_BUFFER_SIZE 32
+#define SHELL_BUFFER_SIZE 1500
 
 UART_HandleTypeDef* shell_huart = NULL;
 
@@ -102,6 +102,7 @@ uint8_t cmd_shell_char_received() {
 	    buf[pos++] = '\r';
     	extern void qcc730_atcmd_send_handler(uint8_t *cmd, uint32_t len);
         qcc730_atcmd_send_handler(buf, pos);
+		memset(buf, 0, SHELL_BUFFER_SIZE);
 	}
 #else
 		cmd_shell_exec(buf);
@@ -127,6 +128,22 @@ uint8_t cmd_shell_char_received() {
 	}
 
 	return 0;
+}
+uint8_t cmd_shell_find_command_index(int *index, char *header, int len)
+{
+	int i = 0;
+	
+	for(i = 0 ; i < shell_func_list_size ; i++) {
+		if (!strncmp(shell_func_list[i].cmd, header, len)) {
+			*index = i;
+			return 0;
+		}
+	}
+	return -1;
+}
+uint8_t cmd_shell_exec_function_by_index(int argc, char * argv, int index)
+{
+	return shell_func_list[index].func(argc, argv);
 }
 
 uint8_t cmd_shell_exec(char * cmd) {

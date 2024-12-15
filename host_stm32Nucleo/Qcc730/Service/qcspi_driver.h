@@ -31,6 +31,16 @@
 #define IRW_CMD_LENGTH	6
 #define IRR_CMD_LENGTH	8
 
+/* For QCC730 slave device */
+#define QCSPI_ID1	0x7F
+#define QCSPI_ID2	0x90
+
+#define QCSPI_MAX_INIT_TRY_TIMES 50
+
+#define BIT_CHECK(var, pos) (((var) & (1 << (pos))) != 0)
+
+#define htole16(x)                        ((uint16_t)(x))
+#define le16toh(x)                        ((uint16_t)(x))
 
 #define COUNTOF(__BUFFER__)   (sizeof(__BUFFER__) / sizeof(*(__BUFFER__)))
 

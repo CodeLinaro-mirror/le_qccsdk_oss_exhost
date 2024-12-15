@@ -13,12 +13,6 @@ typedef enum{
 	QCC730_SPI_READY,
 } qcc730_spi_state;
 
-typedef enum{
-    QAPI_ERROR = -1,  
-	QAPI_OK = 0,
-} qapi_status_t;
-
-
 typedef void (*qapi_atcmd_recv_callback)(uint8_t *data, uint32_t len);
 
 /**
@@ -36,7 +30,7 @@ int32_t qapi_atcmd_get_spi_state(void);
  * @brief API to be used to set the callback funcion which will process the 
  * received response of AT command or Event from QCC730.
  *
- * @param[in] callback        pointer of callback function
+ * @param[in] callback        Pointer to callback function
  * @return  
  * QAPI_OK -- On success.\n
  * QAPI_ERROR -- On failure.
@@ -51,8 +45,8 @@ void qapi_atcmd_release_semp(void);
 /**
  * @brief API to be used to send AT command to QCC730.
  *
- * @param[in] cmd        pointer of AT command
- * @param[in] len        the length of AT command
+ * @param[in] cmd        Pointer to AT command
+ * @param[in] len        Length of AT command
  * @return  
  * QAPI_OK -- On success.\n
  * QAPI_ERROR -- On failure.

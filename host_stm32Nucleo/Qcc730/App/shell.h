@@ -10,20 +10,14 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
-#include "main.h"
-
-#include "FreeRTOS.h"
-#include "queue.h"
-
-
-extern UART_HandleTypeDef huart1;
-#define UART_DEVICE huart1
+#include "qc_os_al.h"
+#include "qc_plat_al.h"
 
 extern char c;
-extern QueueHandle_t qShell;
+extern qc_osal_queue_handle_t qShell;
 
 uint8_t uart_write(char *s, uint16_t size);
-uint8_t cmd_shell_init(UART_HandleTypeDef* huart);
+uint8_t cmd_shell_init(QC_HAL_UART_HandleTypeDef* huart);
 uint8_t cmd_shell_add(char * cmd, int (* pfunc)(int argc, char ** argv), char * description);
 uint8_t cmd_shell_char_received();
 uint8_t cmd_shell_exec(char * cmd);

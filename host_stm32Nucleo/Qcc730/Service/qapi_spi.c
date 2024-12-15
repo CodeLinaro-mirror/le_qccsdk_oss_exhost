@@ -2,9 +2,9 @@
  * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
-
-#include <ring.h>
-#include <qapi_spi.h>
+#include "ring.h"
+#include "qapi_spi.h"
+#include "qcspi_driver.h"
 
 #ifdef QCC730_ATCMD_ENABLE
 extern void atcmd_set_spi_ready(void);
@@ -50,16 +50,21 @@ int32_t qapi_spi_ring_ready(uint8_t ring_id, uint8_t *unread, uint16_t *len)
 	return sw_ring_query_read_data_length(spi_handle,ring_id, unread, len);
 }
 
-
-
-void qapi_spi_get_slaveid(struct device_id *id)
+int32_t qapi_spi_get_slaveid(struct device_id *id)
 {
 	if(!id)
+	{
 		printf("Null pointer \r\n");
-
+        return QAPI_ERROR;	    
+	}
 
 	qcspi_get_slaveid(id->array);
+    if(id->array[1]!=QCSPI_ID1 || id->array[2]!=QCSPI_ID2)
+	{
+	    return QAPI_ERROR;	        
+	}
 
+	return QAPI_OK;
 }
 void qapi_spi_reset( void )
 {

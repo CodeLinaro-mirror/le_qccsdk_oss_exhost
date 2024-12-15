@@ -3,15 +3,13 @@
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
-#include "cmsis_os2.h"
+#include <qc_os_al.h>
+#include <qc_plat_al.h>
 #include "transport_layer.h"
-
 #include "stdio.h"
 #include "qcspi_driver.h"
-#include "qcspi_hal.h"
-#include "semphr.h"
 
-static osMutexId_t mutex_spi_drv=NULL;
+static qc_osal_osMutexId_t mutex_spi_drv=NULL;
 /* Buffer used for transmission */
 uint8_t qcspiTxBuffer[1460]={0};
 
@@ -109,12 +107,12 @@ int32_t qcspi_write_addr_align(uint32_t handle, uint16_t bytes_to_write, uint32_
     memcpy((void*)&data_buf[offset], (void*)write_data_buf, size);
 #if 1
     //needed for STM32 platform to avoid timing issue.
-    if(HAL_OK != qcspi_transfer(&hspi1, (uint8_t *)nop_wbuf, (uint8_t *)nop_rbuf, 1))
+    if(QC_HAL_OK != qcspi_transfer(&hspi1, (uint8_t *)nop_wbuf, (uint8_t *)nop_rbuf, 1))
 	{
 		QCSPI_LOG("NOP fail");
 	}
 
-    //QC_DELAY(1);
+    //qc_hal_delay(1);
 #endif
     ret_val = qcspi_write(handle, 4, addr_align, data_buf);
     total_size += size;
@@ -166,7 +164,7 @@ int32_t qcspi_interrupt_m4(uint32_t handle)
     }
     if(config_value & QCSPI_CONFIG_HOST_IRQ_INT0_EN(1))
     {
-    	QC_DELAY(10);
+    	qc_hal_delay(10);
     	if (qcspi_IRR(handle, SPI_SLAVE_CONFIG, &config_value) != 0)
     		printf("qcspi interrupt duplicate, config_value=%x\r\n",config_value);
 
@@ -197,10 +195,10 @@ int32_t qcspi_read(uint32_t handle, uint16_t size, uint32_t address, uint8_t* rc
 	int32_t ret=0;
 
 	if(!rcv_buf)
-		return STM_ERROR_NULLPTR;
+		return QC_PLAT_ERROR_NULLPTR;
 ;
 	/* update the TRNS_LEN */
-	if(HAL_OK!=qcspi_IRW(0, SPI_SLAVE_TRNS_LEN, size<<16))
+	if(QC_HAL_OK!=qcspi_IRW(0, SPI_SLAVE_TRNS_LEN, size<<16))
 		QCSPI_LOG("TRNS_LEN update error\r\n");
 
     if(size==4)
@@ -211,7 +209,7 @@ int32_t qcspi_read(uint32_t handle, uint16_t size, uint32_t address, uint8_t* rc
 	memset(op_buf, 0, size+1);
 	memset(qcspiRxBuffer, 0, size);
 
-	xSemaphoreTake(mutex_spi_drv, portMAX_DELAY);
+	qc_osal_mutex_take(mutex_spi_drv, QC_OSAL_portMAX_DELAY);
 	/*
 	if(size==4)
 		op_buf[op_offset] = SPI_CMDCODE_READ_SINGLE;
@@ -231,14 +229,14 @@ int32_t qcspi_read(uint32_t handle, uint16_t size, uint32_t address, uint8_t* rc
 	/*todo: should size be +size if setting TRNS_LEN */
 	ret = qcspi_transfer(&hspi1, (uint8_t *)op_buf, (uint8_t *)rx_buf, 15+size);
 
-	xSemaphoreGive(mutex_spi_drv);
-	//if(ret!=HAL_OK)
+	qc_osal_mutex_give(mutex_spi_drv);
+	//if(ret!=QC_HAL_OK)
 	//	assert(0);
 
 	//wait until READ bulk is completed
 	while((retry++)<QCSPI_MAX_INIT_TRY_TIMES)
 	{
-		if(STM_OK == qcspi_RDSR(0,&status))
+		if(QC_PLAT_OK == qcspi_RDSR(0,&status))
 		{
 			if(BIT_CHECK(status, 28))
 			{
@@ -252,15 +250,15 @@ int32_t qcspi_read(uint32_t handle, uint16_t size, uint32_t address, uint8_t* rc
 
 		if(retry == QCSPI_MAX_INIT_TRY_TIMES-1){
 			//printf("r Retry error, size=%d %x\r\n", size,status);
-			return STM_FAIL_NOT_FINISHED;
+			return QC_PLAT_FAIL_NOT_FINISHED;
 		}
-		QC_DELAY(10);
+		qc_hal_delay(10);
 	}
 
 	memcpy(rcv_buf, rx_buf+op_offset, size);
 	//qcspi_word_to_byte_big_endian_array(rcv_buf, &rx_buf[op_offset], size);
 
-	return STM_OK;
+	return QC_PLAT_OK;
 }
 
 int32_t qcspi_write(uint32_t handle, uint16_t size, uint32_t address, uint8_t* snd_buf)
@@ -272,15 +270,15 @@ int32_t qcspi_write(uint32_t handle, uint16_t size, uint32_t address, uint8_t* s
 	int32_t ret=0;
 
 	if(!snd_buf)
-		return STM_ERROR_NULLPTR;
+		return QC_PLAT_ERROR_NULLPTR;
 
 	/* update the TRNS_LEN */
-	if(HAL_OK!=qcspi_IRW(0, SPI_SLAVE_TRNS_LEN, size<<16))
+	if(QC_HAL_OK!=qcspi_IRW(0, SPI_SLAVE_TRNS_LEN, size<<16))
 		QCSPI_LOG("TRNS_LEN update error\r\n");
 
 	memset(op_buf, 0, size);
 
-	xSemaphoreTake(mutex_spi_drv, portMAX_DELAY);
+	qc_osal_mutex_take(mutex_spi_drv, QC_OSAL_portMAX_DELAY);
 	op_buf[op_offset] = SPI_CMDCODE_WRITE;
 	op_offset += 1;
 	qcspi_word_to_byte_big_endian(&op_buf[op_offset], address);
@@ -290,20 +288,20 @@ int32_t qcspi_write(uint32_t handle, uint16_t size, uint32_t address, uint8_t* s
 	memcpy(op_buf+op_offset, snd_buf, size);
 
 	ret = qcspi_transfer(&hspi1, (uint8_t *)op_buf, (uint8_t *)qcspiRxBuffer, 5+size);
-	if(HAL_OK != ret)
+	if(QC_HAL_OK != ret)
 	{
-		QC_DELAY(30);
+		qc_hal_delay(30);
 		//printf("SPI driver write failure ret=%d size=%d address=%x\r\n", ret, size, address);
 		ret = qcspi_transfer(&hspi1, (uint8_t *)op_buf, (uint8_t *)qcspiRxBuffer, 5+size);
-		if(ret!=HAL_OK)
+		if(ret!=QC_HAL_OK)
 			printf("SPI write failure again ret=%d\r\n", ret);
 	}
-	xSemaphoreGive(mutex_spi_drv);
+	qc_osal_mutex_give(mutex_spi_drv);
 		//wait until write is completed -- to check!
 
 	while((retry++)<QCSPI_MAX_INIT_TRY_TIMES)
 	{
-		if(STM_OK == qcspi_RDSR(0,&status))
+		if(QC_PLAT_OK == qcspi_RDSR(0,&status))
 		{
 			if(retry>1)
 				QCSPI_LOG("$");
@@ -319,9 +317,9 @@ int32_t qcspi_write(uint32_t handle, uint16_t size, uint32_t address, uint8_t* s
 
 		if(retry == QCSPI_MAX_INIT_TRY_TIMES-1){
 			printf("w Retry error, size=%d %x\r\n", size,status);
-			return STM_FAIL_NOT_FINISHED;
+			return QC_PLAT_FAIL_NOT_FINISHED;
 		}
-		QC_DELAY(10);
+		qc_hal_delay(10);
 	}
 #if 0	
 	uint32_t test_value;
@@ -336,7 +334,7 @@ int32_t qcspi_write(uint32_t handle, uint16_t size, uint32_t address, uint8_t* s
 			dbg_print(" %02x ",op_buf[i]);
 	QCSPI_LOG("END SPI_Write\r\n");
 #endif
-	return STM_OK;
+	return QC_PLAT_OK;
 }
 void qcspi_reset()
 {
@@ -348,15 +346,15 @@ void qcspi_reset()
 	write_buf[1] = SPI_CMDCODE_RESET_REQUEST_BYTE1;
 	write_buf[2] = SPI_CMDCODE_REQUEST_BYTE2;
 	write_buf[3] = 0x00;
-	if(HAL_OK != qcspi_transfer(&hspi1, (uint8_t *)write_buf, (uint8_t *)read_buf, 4))
+	if(QC_HAL_OK != qcspi_transfer(&hspi1, (uint8_t *)write_buf, (uint8_t *)read_buf, 4))
 	{
 		QCSPI_LOG("write enable fail");
 	}
-	QC_DELAY(1);
+	qc_hal_delay(1);
 
 	qcspi_RDSR(0,&status);
 	printf("status = %x\r\n", status);
-	QC_DELAY(1);
+	qc_hal_delay(1);
 }
 
 void qcspi_init(void)
@@ -365,13 +363,13 @@ void qcspi_init(void)
 	uint8_t read_buf[5]={0};
 
 	write_buf[0] = SPI_CMDCODE_NOP;
-	if(HAL_OK != qcspi_transfer(&hspi1, (uint8_t *)write_buf, (uint8_t *)read_buf, 1))
+	if(QC_HAL_OK != qcspi_transfer(&hspi1, (uint8_t *)write_buf, (uint8_t *)read_buf, 1))
 	{
 		QCSPI_LOG("NOP fail");
 	}
 
 	write_buf[0] = SPI_CMDCODE_WREN;
-	if(HAL_OK != qcspi_transfer(&hspi1, (uint8_t *)write_buf, (uint8_t *)read_buf, 1))
+	if(QC_HAL_OK != qcspi_transfer(&hspi1, (uint8_t *)write_buf, (uint8_t *)read_buf, 1))
 	{
 		QCSPI_LOG("write enable fail");
 	}
@@ -381,7 +379,7 @@ void qcspi_init(void)
 	write_buf[2] = 0; // dummy
 	write_buf[3] = 0; // dummy ;
 	write_buf[4] = 0; // dummy ;
-	if(HAL_OK == qcspi_transfer(&hspi1, (uint8_t *)write_buf, (uint8_t *)read_buf, 3))
+	if(QC_HAL_OK == qcspi_transfer(&hspi1, (uint8_t *)write_buf, (uint8_t *)read_buf, 3))
 	{
 		QCSPI_LOG("RDSR CMD %02x %02x %02x ok\r\n", write_buf[0],write_buf[1],write_buf[2]);
 		QCSPI_LOG("RDSR is %02x %02x %02x\r\n",read_buf[1],read_buf[2],read_buf[3], read_buf[4]);
@@ -397,18 +395,18 @@ void qcspi_get_slaveid(uint8_t *array)
 
 #if 1
 	write_buf[0] = SPI_CMDCODE_NOP;
-	if(HAL_OK != qcspi_transfer(&hspi1, (uint8_t *)write_buf, (uint8_t *)read_buf, 1))
+	if(QC_HAL_OK != qcspi_transfer(&hspi1, (uint8_t *)write_buf, (uint8_t *)read_buf, 1))
 	{
 		QCSPI_LOG("NOP fail");
 	}
-	QC_DELAY(1);
+	qc_hal_delay(1);
 
 	write_buf[0] = SPI_CMDCODE_WREN;
-	if(HAL_OK != qcspi_transfer(&hspi1, (uint8_t *)write_buf, (uint8_t *)read_buf, 1))
+	if(QC_HAL_OK != qcspi_transfer(&hspi1, (uint8_t *)write_buf, (uint8_t *)read_buf, 1))
 	{
 		QCSPI_LOG("write enable fail");
 	}
-	QC_DELAY(1);
+	qc_hal_delay(1);
 #endif
 #if 0
 		uint32_t status = 0;
@@ -417,15 +415,15 @@ void qcspi_get_slaveid(uint8_t *array)
 	write_buf[1] = SPI_CMDCODE_RESET_REQUEST_BYTE1;
 	write_buf[2] = SPI_CMDCODE_REQUEST_BYTE2;
 	write_buf[3] = 0x00;
-	if(HAL_OK != qcspi_transfer(&hspi1, (uint8_t *)write_buf, (uint8_t *)read_buf, 4))
+	if(QC_HAL_OK != qcspi_transfer(&hspi1, (uint8_t *)write_buf, (uint8_t *)read_buf, 4))
 	{
 		QCSPI_LOG("write enable fail");
 	}
-	QC_DELAY(1);
+	qc_hal_delay(1);
 
 	qcspi_RDSR(0,&status);
 	printf("status = %x\r\n", status);
-	QC_DELAY(1);
+	qc_hal_delay(1);
 #endif
 
 #if 1
@@ -441,7 +439,7 @@ void qcspi_get_slaveid(uint8_t *array)
 	read_buf[1] = 0x0;
 	read_buf[2] = 0x0;
 
-	if(HAL_OK == qcspi_transfer(&hspi1, (uint8_t *)write_buf, (uint8_t *)read_buf, 7))
+	if(QC_HAL_OK == qcspi_transfer(&hspi1, (uint8_t *)write_buf, (uint8_t *)read_buf, 7))
 	{
 //		printf("Read id is %02x %02x %02x\r\n",read_buf[0],read_buf[1],read_buf[2]);
 		array[0]=read_buf[0];
@@ -456,20 +454,20 @@ void qcspi_get_slaveid(uint8_t *array)
 uint32_t qcspi_RDSR(uint32_t handle, uint32_t *status)
 {
 	(void)handle;
-	uint32_t ret_val=STM_OK;
+	uint32_t ret_val=QC_PLAT_OK;
 	uint8_t write_buf[5]={0};
     uint8_t read_buf[5]={0};
 	if(!status)
-		ret_val = STM_ERROR_RDSR;
+		ret_val = QC_PLAT_ERROR_RDSR;
 
-	xSemaphoreTake(mutex_spi_drv, portMAX_DELAY);
+	qc_osal_mutex_take(mutex_spi_drv, QC_OSAL_portMAX_DELAY);
 	write_buf[0] = SPI_SLAVE_RDSR;
     write_buf[1] = 0; // dummy
     write_buf[2] = 0; // dummy
     write_buf[3] = 0; // dummy ;
     write_buf[4] = 0; // dummy ;
 
-	if(HAL_OK == qcspi_transfer(&hspi1, (uint8_t *)write_buf, (uint8_t *)read_buf, sizeof(read_buf)))
+	if(QC_HAL_OK == qcspi_transfer(&hspi1, (uint8_t *)write_buf, (uint8_t *)read_buf, sizeof(read_buf)))
 	{
 		QCSPI_LOG("RDSR CMD %02x %02x %02x ok\r\n", write_buf[0],write_buf[1],write_buf[2]);
 		QCSPI_LOG("RDSR is %02x %02x %02x\r\n",read_buf[1],read_buf[2],read_buf[3], read_buf[4]);
@@ -478,7 +476,7 @@ uint32_t qcspi_RDSR(uint32_t handle, uint32_t *status)
 		QCSPI_LOG("HAL_SPI_TransmitReceive error \r\n");
 
 	*status = (read_buf[1]<<24)|(read_buf[2]<<16)|(read_buf[3]<<8)|(read_buf[4]<<0);
-	xSemaphoreGive(mutex_spi_drv);
+	qc_osal_mutex_give(mutex_spi_drv);
 	return ret_val;
 }
 uint32_t qcspi_IRR(uint32_t handle, uint8_t regAddr, uint32_t *regVal)
@@ -490,13 +488,13 @@ uint32_t qcspi_IRR(uint32_t handle, uint8_t regAddr, uint32_t *regVal)
 
 	memset(op_buf, 0, sizeof(op_buf));
 	memset(read_buf, 0, sizeof(read_buf));
-	xSemaphoreTake(mutex_spi_drv, portMAX_DELAY);
+	qc_osal_mutex_take(mutex_spi_drv, QC_OSAL_portMAX_DELAY);
 	//	read id
 	op_buf[0] = SPI_CMDCODE_IRR; //0x81
 	op_buf[1] = regAddr;
 
 	ret_val = qcspi_transfer(&hspi1, (uint8_t *)op_buf, (uint8_t *)read_buf, IRR_CMD_LENGTH);
-	if(HAL_OK == ret_val)
+	if(QC_HAL_OK == ret_val)
 	{
 		QCSPI_LOG("IRR CMD %02x %x ok\r\n", read_buf[0],read_buf[1],regVal);
 
@@ -506,7 +504,7 @@ uint32_t qcspi_IRR(uint32_t handle, uint8_t regAddr, uint32_t *regVal)
 	}
 
 	*regVal = (read_buf[4]<<24)|(read_buf[5]<<16)|(read_buf[6]<<8)|(read_buf[7]<<0);
-	xSemaphoreGive(mutex_spi_drv);
+	qc_osal_mutex_give(mutex_spi_drv);
 	QCSPI_LOG("IRR read value=%x\r\n", *regVal);
 	return ret_val;
 }
@@ -520,18 +518,18 @@ uint32_t qcspi_IRW(uint32_t handle, uint8_t regAddr, uint32_t regVal)
 
 	op_buf[0] = SPI_CMDCODE_IRW; //0x82
 	op_buf[1] = regAddr;
-	xSemaphoreTake(mutex_spi_drv, portMAX_DELAY);
+	qc_osal_mutex_take(mutex_spi_drv, QC_OSAL_portMAX_DELAY);
 	/* memcpy will set with little endian, but qcspi spec needs transfer with big endian CMD+address+data3+data2+data1+data0*/
 	qcspi_word_to_byte_big_endian(&op_buf[2], regVal);
 	ret_val = qcspi_transfer(&hspi1, (uint8_t *)op_buf, (uint8_t *)read_buf, IRW_CMD_LENGTH);
-	if(HAL_OK == ret_val)
+	if(QC_HAL_OK == ret_val)
 	{
 		QCSPI_LOG("Read config is %02x %02x %02x %02x\r\n",read_buf[4],read_buf[5],read_buf[6],read_buf[7]);
 	}
 	else{
 		printf("qcspi_IRW ret=%x add=%x, val=0x%x\r\n", ret_val,regAddr, regVal);
 	}
-	xSemaphoreGive(mutex_spi_drv);
+	qc_osal_mutex_give(mutex_spi_drv);
 	return ret_val;
 }
 
@@ -569,6 +567,6 @@ static void qcspi_word_to_byte_big_endian_array(uint8_t * dst_buf, uint8_t *src_
 
 void qcspi_mutex_init(void)
 {
-	mutex_spi_drv = xSemaphoreCreateMutex();
+	mutex_spi_drv = qc_osal_mutex_create();
 	assert(mutex_spi_drv);
 }

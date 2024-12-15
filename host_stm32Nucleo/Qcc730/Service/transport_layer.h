@@ -3,9 +3,9 @@
  * SPDX-License-Identifier: BSD-3-Clause-Clear
 */
 
+#include <qc_plat_al.h>
 #include <stdint.h>
 #include <string.h>
-#include "qcspi_hal.h"
 
 #ifndef SERVICE_TRANSPORT_LAYER_H_
 #define SERVICE_TRANSPORT_LAYER_H_
@@ -42,7 +42,7 @@ struct pbuf {
 
 void process_rx_task(void * pvParameters);
 void transaction_task(void * pvParameters);
-STM_RET tx_to_slave(uint8_t iface_type, uint8_t iface_num,
+PLAT_RET tx_to_slave(uint8_t iface_type, uint8_t iface_num,
 		uint8_t * wbuffer, uint16_t wlen);
 void handle_rx_data(uint8_t unread, uint16_t size);
 

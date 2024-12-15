@@ -2,18 +2,11 @@
  * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
 */
-
-#include "main.h"
-#include "transport_layer.h"
-#include "cmsis_os2.h"
-#include "FreeRTOS.h"
-#include "task.h"
-#include "semphr.h"
-#include "queue.h"
+#include "qc_os_al.h"
+#include "qc_plat_al.h"
 #ifdef SHELL_FEATURE
 #include "shell.h"
 #endif
-#include "qcc730_config.h"
 #include "qapi_spi.h"
 #include "qapi_atcmd.h"
 
@@ -130,21 +123,20 @@ void qcc730_atcmd_send_handler(uint8_t *cmd, uint32_t len)
 	
     if (QCC730_SPI_NOT_READY == qapi_atcmd_get_spi_state())
     {   
-	    qapi_spi_get_slaveid(&id);
-	    if(id.array[1]!=QCSPI_ID1 || id.array[2]!=QCSPI_ID2)
+	    if (QAPI_OK != qapi_spi_get_slaveid(&id))
 	    {
+    	    printf("qcspi init failed!\r\n");
 			return;	        
 	    }
 			
     	if (0 != qapi_spi_ring_init())
     	{
-    	    printf("qcspi init failed, please try it again!\r\n");
+    	    printf("qcspi ring init failed!\r\n");
 			return;
     	}
     }
 
     qapi_atcmd_send(cmd, len);
-
 }
 
 void qcc730_atcmd_recv_callback(uint8_t *data, uint32_t len)
@@ -171,21 +163,20 @@ void vTaskShell(void * p) {
 
 void task_init_all(void)
 {
-	BaseType_t xReturned;
-	TaskHandle_t xHandle = NULL;
+	QC_OSAL_BaseType_t xReturned;
+	qc_osal_task_handle_t xHandle = NULL;
 
-	/* This will start ticks for OS based system */
-	HAL_IncTick();
-	HAL_GPIO_WritePin(LED_GREEN_GPIO_Port, LED_GREEN_Pin, GPIO_PIN_SET); //chip_on test
+	/* This will start ticks for OS based system*/
+	qc_hal_inc_tick();
 
-	xReturned = xTaskCreate(
+	xReturned = qc_osal_thread_create(
 			vTaskShell,      	/* Function that implements the task. */
 			"Shell",         	/* Text name for the task. */
 			STACK_SIZE,      	/* Stack size in words, not bytes. */
 			(void *) NULL,    	/* Parameter passed into the task. */
 			1,					/* Priority at which the task is created. */
 			&xHandle);      	/* Used to pass out the created task's handle. */
-	if( xReturned == errCOULD_NOT_ALLOCATE_REQUIRED_MEMORY ) {
+	if( xReturned == QC_OSAL_ERR_MEM_ALLOCATE_FAILED ) {
 		printf("Task Shell creation error: Could not allocate required memory\r\n");
 	}
 

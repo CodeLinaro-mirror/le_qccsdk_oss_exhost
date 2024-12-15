@@ -2,12 +2,8 @@
  * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
-#include "cmsis_os2.h"
-#include "FreeRTOS.h"
-#include "task.h"
-#include "semphr.h"
-#include "queue.h" 
-#include "transport_layer.h"
+#include "qc_plat_al.h"
+#include "qc_os_al.h"
 #include "ring.h"
 #include "qapi_spi.h"
 #include "qapi_atcmd.h"
@@ -34,7 +30,7 @@ int32_t qapi_atcmd_set_recv_cb(qapi_atcmd_recv_callback callback)
 void qapi_atcmd_release_semp(void)
 {
 	if (qcc730_atcmd && (qcc730_atcmd->semaphore != NULL)) {
-		osSemaphoreRelease(qcc730_atcmd->semaphore);        
+		qc_osal_semaphore_give(qcc730_atcmd->semaphore);        
 	}
 }
 

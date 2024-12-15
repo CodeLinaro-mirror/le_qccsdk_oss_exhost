@@ -3,19 +3,16 @@
  * SPDX-License-Identifier: BSD-3-Clause-Clear
 */
 
-#include "main.h"
+#include "qcc730_config.h"
+#include "qc_os_al.h"
+#include "qc_plat_al.h"
 #include "qcc730_spi_host.h"
 #include "qapi_spi.h"
 #include "transport_layer.h"
-#include "cmsis_os2.h"
-#include "FreeRTOS.h"
-#include "task.h"
-#include "semphr.h"
-#include "queue.h"
+
 #ifdef SHELL_FEATURE
 #include "shell.h"
 #endif
-#include "qcc730_config.h"
 
 #ifdef QCC730_SPI_DEMO_ENABLE
 #define demo_print printf
@@ -51,7 +48,7 @@ static void app_txrx_demo(uint32_t num, uint32_t size)
         qcspi_ring_init_flag = 1;
     }
 
-	TickType_t time1 = xTaskGetTickCount();
+	qc_osal_tick_type_t time1 = qc_osal_get_ticks();
 	demo_print("Start write RING %d\r\n",(int)time1);
 
 	g_buffer.header.len = buf_len;
@@ -88,9 +85,9 @@ static void app_txrx_demo(uint32_t num, uint32_t size)
 		}
 
 	}
-	demo_print("send %d bytes time:[now]=%d,time1=%d,interval:%d ms\r\n", i*g_buffer.header.len,xTaskGetTickCount(), time1, (xTaskGetTickCount()-time1)*1000/configTICK_RATE_HZ);
+	demo_print("send %d bytes time:[now]=%d,time1=%d,interval:%d ms\r\n", i*g_buffer.header.len,qc_osal_get_ticks(), time1, (qc_osal_get_ticks()-time1)*1000/configTICK_RATE_HZ);
 
-//	vTaskDelete(NULL);
+//	qc_osal_thread_delete(NULL);
 }
 #endif
 
@@ -140,7 +137,7 @@ static void app_demo_tx(uint32_t num, uint32_t size)
 
 	/* ======= END Prepare========================== */
 
-	TickType_t time1 = xTaskGetTickCount();
+	qc_osal_tick_type_t time1 = qc_osal_get_ticks();
 	for(j=0;j<count;j++)
 	{
 		if(qapi_spi_ring_write(write_buf, buf_len, ring_id, HFC_TEST_DEMO_DATA))
@@ -149,7 +146,7 @@ static void app_demo_tx(uint32_t num, uint32_t size)
 	}
 
 
-	demo_print("send %d bytes time:[now]=%d,time1=%d,interval:%d ms\r\n", j*buf_len,xTaskGetTickCount(), time1, ((xTaskGetTickCount()-time1)/configTICK_RATE_HZ))*1000;
+	demo_print("send %d bytes time:[now]=%d,time1=%d,interval:%d ms\r\n", j*buf_len,qc_osal_get_ticks(), time1, ((qc_osal_get_ticks()-time1)/configTICK_RATE_HZ))*1000;
 
 	/* ======= get result ========================== */
 	ctrl_buf.hdr.msg_id = HFC_TEST_DATA_END;
@@ -164,7 +161,7 @@ static void app_demo_tx(uint32_t num, uint32_t size)
 	demo_print("END: info_type=%d,type=%d,size=%d, mode=%d, recv_bytes=%d, send_bytes=%d\r\n", info_type, test_result.hdr.msg_id, result_size, test_result.mode,test_result.recv_bytes, test_result.send_bytes);
 	/* ======= END ========================== */
 }
-extern osSemaphoreId_t osSemaphore;
+extern qc_osal_semaphore_handle_t osSemaphore;
 static void app_demo_rx(uint32_t num, uint32_t size, uint32_t int_flag)
 {
 	demo_print("app_demo rx\r\n");
@@ -202,7 +199,7 @@ static void app_demo_rx(uint32_t num, uint32_t size, uint32_t int_flag)
 		demo_print("qapi_spi_ring_write error\r\n");
 	/* ======= END Prepare========================== */
 
-	TickType_t time1 = xTaskGetTickCount();
+	qc_osal_tick_type_t time1 = qc_osal_get_ticks();
 
 
 
@@ -220,7 +217,7 @@ static void app_demo_rx(uint32_t num, uint32_t size, uint32_t int_flag)
 					break;
 				}
 				retry++;
-				QC_DELAY(10);
+				qc_hal_delay(10);
 				if(retry>200)
 				{
 					retry=0;
@@ -229,7 +226,7 @@ static void app_demo_rx(uint32_t num, uint32_t size, uint32_t int_flag)
 				}
 			}
 			retry = 0;
-			//vTaskDelay(100/portTICK_PERIOD_MS);
+			//qc_osal_task_delay(100/QC_OSAL_portTICK_PERIOD_MS);
 
 		}
 	}
@@ -238,7 +235,7 @@ static void app_demo_rx(uint32_t num, uint32_t size, uint32_t int_flag)
 		int rx_num=0;
 		while(rx_num<count)
 		{
-			if (osSemaphoreAcquire(osSemaphore , osWaitForever) == osOK) {
+			if (qc_osal_semaphore_take(osSemaphore , QC_OSAL_osWaitForever) == QC_OSAL_osOK) {
 				rx_num++;
 
 				ret = qapi_spi_ring_read(recv_buf, &buf_len, ring_id, &info_type);
@@ -251,7 +248,7 @@ static void app_demo_rx(uint32_t num, uint32_t size, uint32_t int_flag)
 		}
 		//demo_print("INT cnt=%d rx_num=%d ringid=%d \r\n", int_count, rx_num, ring_id);
 	}
-	demo_print("recv %d bytes time:[now]=%d,time1=%d,interval:%d ms\r\n", j*buf_len,xTaskGetTickCount(), time1, (xTaskGetTickCount()-time1)*1000/configTICK_RATE_HZ);
+	demo_print("recv %d bytes time:[now]=%d,time1=%d,interval:%d ms\r\n", j*buf_len,qc_osal_get_ticks(), time1, (qc_osal_get_ticks()-time1)*1000/configTICK_RATE_HZ);
 	{
 		for(j=0;j<buf_len;j++)
 			demo_print("%x ",recv_buf[j]);
@@ -269,7 +266,7 @@ static void app_demo_rx(uint32_t num, uint32_t size, uint32_t int_flag)
 
 	if(qapi_spi_ring_write((uint8_t *)&ctrl_buf, sizeof(ctrl_buf), A2F_CONFIG_RING_ID, CONFIG_INFO_HFC))
 		demo_print("qapi_spi_ring_write error\r\n");
-	vTaskDelay(100/portTICK_PERIOD_MS);
+	qc_osal_task_delay(100/QC_OSAL_portTICK_PERIOD_MS);
 	if(qapi_spi_ring_read((uint8_t *)&test_result, &result_size, F2A_CONFIG_RING_ID, &info_type))
 		demo_print("qapi_spi_ring_read error result_size=%d\r\n",result_size);
 
@@ -300,7 +297,7 @@ static void app_demo(uint32_t num, uint32_t size)
         qcspi_ring_init_flag = 1;
     }
 
-	TickType_t time1 = xTaskGetTickCount();
+	qc_osal_tick_type_t time1 = qc_osal_get_ticks();
 
 	count = (num==0 || num>MAX_LOOP)? 10:num;
 	buf_len = (size==0 || size>1400)? 1400:size;
@@ -310,7 +307,7 @@ static void app_demo(uint32_t num, uint32_t size)
 	{
 		if(qapi_spi_ring_write(write_buf, buf_len, ring_id, HFC_TEST_DEMO_DATA))
 			demo_print("qapi_spi_ring_write error\r\n");
-//		demo_print("write time cost: [now]=%d, time1=%d,  interval:%d ms\r\n", xTaskGetTickCount(), time1, (xTaskGetTickCount()-time1)*1000/configTICK_RATE_HZ);
+//		demo_print("write time cost: [now]=%d, time1=%d,  interval:%d ms\r\n", qc_osal_get_ticks(), time1, (qc_osal_get_ticks()-time1)*1000/configTICK_RATE_HZ);
 
 		while(ret=qapi_spi_ring_read(recv_buf, &buf_len, ring_id, &info_type))
 		{
@@ -321,7 +318,7 @@ static void app_demo(uint32_t num, uint32_t size)
 			}
 			//demo_print(".");
 		}
-//		vTaskDelay(500/portTICK_PERIOD_MS);
+//		qc_osal_task_delay(500/QC_OSAL_portTICK_PERIOD_MS);
 
 		for(k=0;k<buf_len;k++)
 		{
@@ -334,14 +331,14 @@ static void app_demo(uint32_t num, uint32_t size)
 	}
 
 
-	demo_print("send %d bytes time:[now]=%d,time1=%d,interval:%d ms\r\n", j*buf_len,xTaskGetTickCount(), time1, (xTaskGetTickCount()-time1)*1000/configTICK_RATE_HZ);
+	demo_print("send %d bytes time:[now]=%d,time1=%d,interval:%d ms\r\n", j*buf_len,qc_osal_get_ticks(), time1, (qc_osal_get_ticks()-time1)*1000/configTICK_RATE_HZ);
 	{
 		for(j=0;j<buf_len;j++)
 			demo_print("%x ",recv_buf[j]);
 		demo_print("\r\n");
 	}
 
-//    vTaskDelete(NULL);
+//    qc_osal_thread_delete(NULL);
 }
 
 #endif
@@ -351,15 +348,15 @@ static void spiRxTask(void* argument)
 	demo_print("Start spiRxTask.\r\n");
     while(1)
     {
-        HAL_GPIO_TogglePin(LED_GREEN_GPIO_Port, LED_GREEN_Pin);
-        vTaskDelay(2000/portTICK_PERIOD_MS);
-        HAL_GPIO_TogglePin(LED_BLUE_GPIO_Port, LED_GREEN_Pin);
-        vTaskDelay(3000/portTICK_PERIOD_MS);
+        qc_hal_gpio_toggle(QC_HAL_LED_GREEN_GPIO_Port, QC_HAL_LED_GREEN_Pin);
+        qc_osal_task_delay(2000/QC_OSAL_portTICK_PERIOD_MS);
+        qc_hal_gpio_toggle(QC_HAL_LED_BLUE_GPIO_Port, QC_HAL_LED_GREEN_Pin);
+        qc_osal_task_delay(3000/QC_OSAL_portTICK_PERIOD_MS);
         demo_print("R ");
 
     }
 
-    vTaskDelete(NULL);
+    qc_osal_thread_delete(NULL);
 }
 static void spiTxTask(void* argument)
 {
@@ -367,12 +364,12 @@ static void spiTxTask(void* argument)
 
     while(1)
     {
-        HAL_GPIO_TogglePin(LED_RED_GPIO_Port, LED_RED_Pin);
-        vTaskDelay(3000/portTICK_PERIOD_MS);
+        qc_hal_gpio_toggle(QC_HAL_LED_RED_GPIO_Port, QC_HAL_LED_RED_Pin);
+        qc_osal_task_delay(3000/QC_OSAL_portTICK_PERIOD_MS);
         demo_print("T ");
     }
 
-    vTaskDelete(NULL);
+    qc_osal_thread_delete(NULL);
 }
 
 void spi_raw_test(uint32_t num, uint32_t size)
@@ -380,10 +377,11 @@ void spi_raw_test(uint32_t num, uint32_t size)
 	struct device_id id = {0};
 	uint32_t j;
 	uint32_t count=0, buf_len=0;
-	qapi_spi_get_slaveid(&id);
-	demo_print("Slave Id=%x %x %x\r\n", id.array[0],id.array[1],id.array[2]);
-	if(id.array[1]!=QCSPI_ID1 && QCSPI_ID1)
+	if (QAPI_OK != qapi_spi_get_slaveid(&id))
+	{
+	    demo_print("Slave Id=%x %x %x\r\n", id.array[0],id.array[1],id.array[2]);
 		return;
+	}
 
 	#define ACCESS_LEN 1400
 	#define ACCESS_ADDR	0x33830
@@ -398,7 +396,7 @@ void spi_raw_test(uint32_t num, uint32_t size)
 	for(j=0;j<buf_len;j++)
 		w_buf[j] = 0xa5;
 
-	TickType_t time1 = xTaskGetTickCount();
+	qc_osal_tick_type_t time1 = qc_osal_get_ticks();
 	for(j=0;j<count/*TEST_CYCLE*/;j++)
 	{
 		SPI_Write(w_buf, buf_len, ACCESS_ADDR);
@@ -409,11 +407,11 @@ void spi_raw_test(uint32_t num, uint32_t size)
             demo_print("There is a mismatch between received data and sent data.\r\n");
         }
 	}
-	demo_print("send %d bytes time:[now]=%d,time1=%d,interval:%d ms\r\n", j*buf_len,xTaskGetTickCount(), time1, (xTaskGetTickCount()-time1)*1000/configTICK_RATE_HZ);
+	demo_print("send %d bytes time:[now]=%d,time1=%d,interval:%d ms\r\n", j*buf_len,qc_osal_get_ticks(), time1, (qc_osal_get_ticks()-time1)*1000/configTICK_RATE_HZ);
 	for(int i=0;i<buf_len;i++)
 		demo_print("%x ",buf[i]);
 	demo_print("\r\n");
-//	vTaskDelete(NULL);
+//	qc_osal_thread_delete(NULL);
 
 }
 #endif
@@ -424,20 +422,20 @@ void SPI_taskInit(void)
 	demo_print("new Start SPI_taskInit.\r\n");
 	qapi_spi_init();
 #ifdef DEMO_RAW_SPI_TEST
-    xTaskCreate(spiTxTask, "spiTxTask", 256+512, NULL, tskIDLE_PRIORITY + 3, NULL);
-    xTaskCreate(spiRxTask, "spiRxTask", 256, NULL, tskIDLE_PRIORITY + 4, NULL);
-    xTaskCreate(spi_raw_test, "spi_raw_test", 1024*4, NULL, tskIDLE_PRIORITY + 1, NULL);
+    qc_osal_thread_create(spiTxTask, "spiTxTask", 256+512, NULL, QC_OSAL_tskIDLE_PRIORITY + 3, NULL);
+    qc_osal_thread_create(spiRxTask, "spiRxTask", 256, NULL, QC_OSAL_tskIDLE_PRIORITY + 4, NULL);
+    qc_osal_thread_create(spi_raw_test, "spi_raw_test", 1024*4, NULL, QC_OSAL_tskIDLE_PRIORITY + 1, NULL);
 //    spi_raw_test();
 #endif
 #ifdef DEMO_TXRX_TEST
-    xTaskCreate(transaction_task, "transaction_task", 1024, NULL, tskIDLE_PRIORITY + 6, NULL);
-    xTaskCreate(process_rx_task, "process_rx_task", 1024, NULL, tskIDLE_PRIORITY + 5, NULL);
-    xTaskCreate(app_txrx_demo, "app_txrx_demo", 1024*4, NULL, tskIDLE_PRIORITY + 3, NULL);
+    qc_osal_thread_create(transaction_task, "transaction_task", 1024, NULL, QC_OSAL_tskIDLE_PRIORITY + 6, NULL);
+    qc_osal_thread_create(process_rx_task, "process_rx_task", 1024, NULL, QC_OSAL_tskIDLE_PRIORITY + 5, NULL);
+    qc_osal_thread_create(app_txrx_demo, "app_txrx_demo", 1024*4, NULL, QC_OSAL_tskIDLE_PRIORITY + 3, NULL);
 
 //    app_txrx_demo(0);
 #endif
 #ifdef DEMO_BASIC_RING_TEST
-    xTaskCreate(app_demo, "app_demo", 1024*4, NULL, tskIDLE_PRIORITY + 1, NULL);
+    qc_osal_thread_create(app_demo, "app_demo", 1024*4, NULL, QC_OSAL_tskIDLE_PRIORITY + 1, NULL);
 #endif
 }
 #ifdef SHELL_FEATURE
@@ -479,7 +477,7 @@ void demo_stop_test(int mode)
 	if(qapi_spi_ring_write(p_buf, sizeof(write_buf), A2F_CONFIG_RING_ID,CONFIG_INFO_HFC))
 		demo_print("qapi_spi_ring_write error\r\n");
 
-	vTaskDelay(100/portTICK_PERIOD_MS);
+	qc_osal_task_delay(100/QC_OSAL_portTICK_PERIOD_MS);
 	p_buf =(uint8_t *)&read_buf;
 	if(qapi_spi_ring_read(p_buf, &size, F2A_CONFIG_RING_ID, &info_type))
 		demo_print("qapi_spi_ring_read error\r\n");
@@ -501,7 +499,7 @@ void demo_reset_test(int num)
 #define PMU_CORE_LDOAO_VIN_MODE_VBATT (0)
 	extern uint8_t reset_flag;
 	reset_flag = 1;
-	QC_DELAY(50);
+	qc_hal_delay(50);
 	qcspi_mutex_init();
 	/* do SW WR for chip_on */
 	SPI_Read((uint8_t *)&val, sizeof(val), PMU_CORE_12);
@@ -527,10 +525,10 @@ void demo_reset_test(int num)
 #endif
 	/* host toggle */
 #define DELAY_TIMING	30
-	HAL_GPIO_WritePin(LED_GREEN_GPIO_Port, LED_GREEN_Pin, GPIO_PIN_RESET); //chip_on test
-	//vTaskDelay(DELAY_TIMING/portTICK_PERIOD_MS);
-	QC_DELAY(DELAY_TIMING);
-	HAL_GPIO_WritePin(LED_GREEN_GPIO_Port, LED_GREEN_Pin, GPIO_PIN_SET); //chip_on test
+	qc_hal_gpio_write(QC_HAL_LED_GREEN_GPIO_Port, QC_HAL_LED_GREEN_Pin, QC_HAL_GPIO_PIN_RESET); //chip_on test
+	//qc_osal_task_delay(DELAY_TIMING/QC_OSAL_portTICK_PERIOD_MS);
+	qc_hal_delay(DELAY_TIMING);
+	qc_hal_gpio_write(QC_HAL_LED_GREEN_GPIO_Port, QC_HAL_LED_GREEN_Pin, QC_HAL_GPIO_PIN_SET); //chip_on test
 	reset_flag = 0;
 	demo_print("END RESET\r\n");
 
@@ -542,9 +540,9 @@ void demo_wakeup_test(int num)
 
 	/* host toggle */
 	if(num==1)
-		HAL_GPIO_WritePin(LED_GREEN_GPIO_Port, LED_GREEN_Pin, GPIO_PIN_SET); //chip_on test
+		qc_hal_gpio_write(QC_HAL_LED_GREEN_GPIO_Port, QC_HAL_LED_GREEN_Pin, QC_HAL_GPIO_PIN_SET); //chip_on test
 	else
-		HAL_GPIO_WritePin(LED_GREEN_GPIO_Port, LED_GREEN_Pin, GPIO_PIN_RESET); //chip_on test
+		qc_hal_gpio_write(QC_HAL_LED_GREEN_GPIO_Port, QC_HAL_LED_GREEN_Pin, QC_HAL_GPIO_PIN_RESET); //chip_on test
 
 }
 
@@ -697,29 +695,29 @@ void vTaskShell(void * p) {
 
 void task_init_all(void)
 {
-	BaseType_t xReturned;
-	TaskHandle_t xHandle = NULL;
+	QC_OSAL_BaseType_t xReturned;
+	qc_osal_task_handle_t xHandle = NULL;
 
 	qapi_spi_init();
 	/* This will start ticks for OS based system */
-	HAL_IncTick();
-	HAL_GPIO_WritePin(LED_GREEN_GPIO_Port, LED_GREEN_Pin, GPIO_PIN_SET); //chip_on test
+	qc_hal_inc_tick();
+	qc_hal_gpio_write(QC_HAL_LED_GREEN_GPIO_Port, QC_HAL_LED_GREEN_Pin, QC_HAL_GPIO_PIN_SET); //chip_on test
 #ifdef DEMO_TXRX_TEST
-    xTaskCreate(transaction_task, "transaction_task", 1024*3, NULL, tskIDLE_PRIORITY + 5, NULL);
-    vTaskDelay(300/portTICK_PERIOD_MS);
+    qc_osal_thread_create(transaction_task, "transaction_task", 1024*3, NULL, QC_OSAL_tskIDLE_PRIORITY + 5, NULL);
+    qc_osal_task_delay(300/QC_OSAL_portTICK_PERIOD_MS);
 
-    //xTaskCreate(process_rx_task, "process_rx_task", 1024*3, NULL, tskIDLE_PRIORITY + 5, NULL);
-    //vTaskDelay(300/portTICK_PERIOD_MS);
+    //qc_osal_thread_create(process_rx_task, "process_rx_task", 1024*3, NULL, QC_OSAL_tskIDLE_PRIORITY + 5, NULL);
+    //qc_osal_task_delay(300/QC_OSAL_portTICK_PERIOD_MS);
 #endif
 
-	xReturned = xTaskCreate(
+	xReturned = qc_osal_thread_create(
 			vTaskShell,      	/* Function that implements the task. */
 			"Shell",         	/* Text name for the task. */
 			STACK_SIZE,      	/* Stack size in words, not bytes. */
 			(void *) NULL,    	/* Parameter passed into the task. */
 			1,					/* Priority at which the task is created. */
 			&xHandle);      	/* Used to pass out the created task's handle. */
-	if( xReturned == errCOULD_NOT_ALLOCATE_REQUIRED_MEMORY ) {
+	if( xReturned == QC_OSAL_ERR_MEM_ALLOCATE_FAILED ) {
 		printf("Task Shell creation error: Could not allocate required memory\r\n");
 	}
 

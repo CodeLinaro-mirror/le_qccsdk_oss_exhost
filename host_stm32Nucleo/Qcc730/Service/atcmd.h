@@ -5,7 +5,6 @@
 
 #include <stdint.h>
 #include <string.h>
-#include "qcspi_hal.h"
 
 #ifndef _ATCMD_H_
 #define _ATCMD_H_
@@ -31,10 +30,10 @@ typedef struct qcc730_atcmd_s
     uint8_t rx_buf[ATCMD_BUF_LEN];
     uint8_t tx_buf[ATCMD_BUF_LEN];
 	int     spi_state;
-    osSemaphoreId_t semaphore;
-    osMutexId_t mutex;
-    QueueHandle_t tx_queue;
-    QueueHandle_t rx_queue;	
+    qc_osal_semaphore_handle_t semaphore;
+    qc_osal_osMutexId_t mutex;
+    qc_osal_queue_handle_t tx_queue;
+    qc_osal_queue_handle_t rx_queue;	
 	void (*recv_cb)(uint8_t *data, uint32_t len);
 }qcc730_atcmd_t;
 

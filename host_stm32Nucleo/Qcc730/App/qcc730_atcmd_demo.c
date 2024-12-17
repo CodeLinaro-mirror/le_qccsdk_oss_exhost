@@ -13,24 +13,97 @@
 #ifdef QCC730_ATCMD_ENABLE
 #define AT_ARGC_MAX      128
 #define AT_CMD_MAX_SIZE  16
+#define ATCMD_PARSER_FUNC_LIST_MAX_SIZE 32
 
 int qat_demo_parser_enable = 1;
+
+typedef struct{
+	char * cmd;
+	int (* func)(int argc, char ** argv);
+	char * description;
+} atcmd_parser_func_t;
+
+static int atcmd_parser_func_list_size = 0;
+static atcmd_parser_func_t atcmd_parser_func_list[ATCMD_PARSER_FUNC_LIST_MAX_SIZE];
+
+uint8_t atcmd_parser_exec_function_by_index(int argc, char * argv, int index)
+{
+	return atcmd_parser_func_list[index].func(argc, argv);
+}
+
+uint8_t atcmd_parser_find_command_index(int *index, char *header, int len)
+{
+	int i = 0;
+	
+	for(i = 0 ; i < atcmd_parser_func_list_size ; i++) {
+		if (!strncmp(atcmd_parser_func_list[i].cmd, header, len)) {
+			*index = i;
+			return 0;
+		}
+	}
+	return -1;
+}
+
+uint8_t atcmd_parser_func_add(char * cmd, int (* pfunc)(int argc, char ** argv), char * description) {
+	if (atcmd_parser_func_list_size < ATCMD_PARSER_FUNC_LIST_MAX_SIZE) {
+		atcmd_parser_func_list[atcmd_parser_func_list_size].cmd = cmd;
+		atcmd_parser_func_list[atcmd_parser_func_list_size].func = pfunc;
+		atcmd_parser_func_list[atcmd_parser_func_list_size].description = description;
+		atcmd_parser_func_list_size++;
+		return 0;
+	}
+
+	return -1;
+}
+
 void atcmd_help(int argc, char ** argv)
 {
     printf("AT+CMD?\r\n");
 }
 
-void atcmd_RDMEM(int argc, char ** argv)
+void atcmd_enable_parser(int argc, char ** argv)
 {
-	printf("+RDMEM\r\n");
-	printf("addr = %s\r\n", argv[0]);
-	printf("size = %s\r\n", argv[1]);
-	printf("value(hex) = %s\r\n", argv[2]);
-	printf("value(dec) = %s\r\n", argv[3]);
-	printf("status = %s\r\n", argv[3]);
+	if(argc > 2)
+	{
+		printf("usage: parser enable|disable\r\n");
+		return;
+	}
+
+	if(strncmp(argv[1], "enable", 6) == 0)
+    {
+		printf("response parser enabled\r\n");
+		qat_demo_parser_enable = 1;
+	}
+	else if(strncmp(argv[1], "disable", 7) == 0)
+	{
+		printf("response parser disabled\r\n");
+		qat_demo_parser_enable = 0;
+	}
+	else
+	{
+		printf("usage: parser enable|disable\r\n");
+	}
+	return;
 }
 
-void atcmd_CIPDHCPV4C(int argc, char ** argv)
+
+void atcmd_response_parser_RDMEM(int argc, char ** argv)
+{
+	if(argc == 4)
+	{
+		printf("+RDMEM\r\n");
+		printf("addr = %s\r\n", argv[0]);
+		printf("size = %s\r\n", argv[1]);
+		printf("value(hex) = %s\r\n", argv[2]);
+		printf("value(dec) = %s\r\n", argv[3]);
+	}
+	else
+	{
+		printf("no need to parse\r\n");
+	}
+}
+
+void atcmd_response_parser_CIPDHCPV4C(int argc, char ** argv)
 {
 	printf("+CIPDHCPV4C\r\n");
 	printf("IP = %s\r\n", argv[0]);
@@ -68,7 +141,7 @@ uint8_t atcmd_response_handler(uint16_t buf_len, char * cmd) {
 	header[h] = '\0';
 	arg_start = i;
 	// Searching for the command and parameters
-	if(0 == cmd_shell_find_command_index(&i, header, h))
+	if(0 == atcmd_parser_find_command_index(&i, header, h))
 	{
 		printf("Response before parsing:\r\n");
 		printf("%s\r\n", cmd);
@@ -99,7 +172,7 @@ uint8_t atcmd_response_handler(uint16_t buf_len, char * cmd) {
 			}
 		}
 		printf("Response after parsing:\r\n");
-		return cmd_shell_exec_function_by_index(argc, argv, i);
+		return atcmd_parser_exec_function_by_index(argc, argv, i);
 	}
 	else
 	{
@@ -151,11 +224,16 @@ void qcc730_atcmd_recv_callback(uint8_t *data, uint32_t len)
 
 #define STACK_SIZE 2048
 
+void atcmd_add_command_parser(void)
+{
+	atcmd_parser_func_add("+RDMEM", (void*)atcmd_response_parser_RDMEM, "parse RDMEM response");
+	atcmd_parser_func_add("+CIPDHCPV4C", (void*)atcmd_response_parser_CIPDHCPV4C, "parse CIPDHCPV4C response");
+}
 void vTaskShell(void * p) {
 	cmd_shell_init(&(UART_DEVICE));
 	cmd_shell_add("help", (void*)atcmd_help, "AT Command help!");
-	cmd_shell_add("+RDMEM", (void*)atcmd_RDMEM, "parse RDMEM response");
-	cmd_shell_add("+CIPDHCPV4C", (void*)atcmd_CIPDHCPV4C, "parse CIPDHCPV4C response");
+	cmd_shell_add("parser", (void*)atcmd_enable_parser, "AT Command help!");
+	
 	while(1){
 		cmd_shell_char_received();
 	}
@@ -180,6 +258,8 @@ void task_init_all(void)
 		printf("Task Shell creation error: Could not allocate required memory\r\n");
 	}
 
+	atcmd_add_command_parser();
+	
 	qapi_spi_init();	
 	qapi_atcmd_init();
 	qapi_atcmd_set_recv_cb(qcc730_atcmd_recv_callback);

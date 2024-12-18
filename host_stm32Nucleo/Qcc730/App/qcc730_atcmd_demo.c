@@ -261,6 +261,7 @@ void task_init_all(void)
 	atcmd_add_command_parser();
 	
 	qapi_spi_init();	
+	qapi_spi_ring_init();
 	qapi_atcmd_init();
 	qapi_atcmd_set_recv_cb(qcc730_atcmd_recv_callback);
 }

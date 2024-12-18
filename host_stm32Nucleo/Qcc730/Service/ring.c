@@ -347,6 +347,7 @@ int32_t sw_ring_write_buffer(uint32_t handle, uint8_t *data, uint16_t write_len,
         return 0;
     }
 
+#ifdef QCC730_SPI_DEMO_ENABLE 
     // Wait A2F data is handled by Fermion. Only update index/outdex with size = 0.
     RING_LOG("[%d]: Wait A2F data is handled by Fermion.\r\n", qc_osal_get_ticks());
     if (sw_ring_wait_for_A2F(handle, 0, ringStatus))
@@ -355,6 +356,7 @@ int32_t sw_ring_write_buffer(uint32_t handle, uint8_t *data, uint16_t write_len,
     	RING_LOG("%s: sw_ring_wait_for_A2F error.\r\n", __FUNCTION__);
     	return 0;
     }
+#endif
 
     return 0;
 }

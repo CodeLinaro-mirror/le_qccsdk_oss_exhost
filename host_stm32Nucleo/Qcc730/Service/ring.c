@@ -3,12 +3,12 @@
  * SPDX-License-Identifier: BSD-3-Clause-Clear
 */
 
+#include <qc_os_al.h>
+#include <qc_plat_al.h>
 #include "ring.h"
 #include "fermion_table_api.h"
 #include "qcspi_driver.h"
-#include "qcspi_hal.h"
-#include "FreeRTOS.h"
-#include "task.h"
+
 
 //#define RING_DBG
 #ifdef RING_DBG
@@ -98,13 +98,13 @@ static int32_t sw_ring_wait_for_F2A(uint32_t handle, sw_ring_status_t* ringStatu
 
         if (buffer_status_try_cnt == SW_RING_STATUS_RETRY_LIMIT)
         {
-            printf("%s failed, stop writing! len=%d\r\n", __FUNCTION__, len);
+            //printf("%s failed, stop writing! len=%d\r\n", __FUNCTION__, len);
             return RING_ERROR;
         }
 
         RING_LOG("%s wait delay: %d.\r\n", __FUNCTION__, buffer_status_try_cnt);
 //        SW_RING_DELAY_AFTER_BUFFER_FULL(); // delay for slave to release the rx buffer
-        QC_DELAY(1);
+        qc_hal_delay(1);
     }
 
     return RING_ERROR;
@@ -219,8 +219,8 @@ static int32_t sw_ring_wait_for_A2F(uint32_t handle, uint16_t size, sw_ring_stat
         }
 
 //        SW_RING_DELAY_AFTER_BUFFER_FULL(); // delay for slave to release the rx buffer
-//        vTaskDelay(50/portTICK_PERIOD_MS);
-        QC_DELAY(1);
+//        qc_osal_task_delay(50/QC_OSAL_portTICK_PERIOD_MS);
+        qc_hal_delay(1);
 
     }
 
@@ -341,20 +341,22 @@ int32_t sw_ring_write_buffer(uint32_t handle, uint8_t *data, uint16_t write_len,
     {
     	RING_LOG("%s: wait %d ms ...\r\n", __FUNCTION__, waitMsSec);
 //        msleep(waitMsSec);
-//        vTaskDelay(waitMsSec/portTICK_PERIOD_MS);
+//        qc_osal_task_delay(waitMsSec/QC_OSAL_portTICK_PERIOD_MS);
     	RING_LOG("%s: Redo sw_ring_init_table.\r\n", __FUNCTION__);
         sw_ring_init_table(handle);
         return 0;
     }
 
+#ifdef QCC730_SPI_DEMO_ENABLE 
     // Wait A2F data is handled by Fermion. Only update index/outdex with size = 0.
-    RING_LOG("[%d]: Wait A2F data is handled by Fermion.\r\n", xTaskGetTickCount());
+    RING_LOG("[%d]: Wait A2F data is handled by Fermion.\r\n", qc_osal_get_ticks());
     if (sw_ring_wait_for_A2F(handle, 0, ringStatus))
     {
 //        SW_RING_ASSERT_OR_RETURN(-1);
     	RING_LOG("%s: sw_ring_wait_for_A2F error.\r\n", __FUNCTION__);
     	return 0;
     }
+#endif
 
     return 0;
 }
@@ -516,6 +518,7 @@ int32_t sw_ring_init_table(uint32_t handle)
     {
         RING_LOG("%s: table_hdr=0x%08X failed, FERM_TABLE_HDR_PATTERN=0x%08X.\r\n", __FUNCTION__, gp_ferm_default_table.table_hdr, FERM_TABLE_HDR_PATTERN);
 //        SW_RING_ASSERT_OR_RETURN(-1);
+        return -1;
     }
 
     RING_LOG("%s: ferm_maj_ver=0x%08X.\r\n", __FUNCTION__, gp_ferm_default_table.ferm_maj_ver);

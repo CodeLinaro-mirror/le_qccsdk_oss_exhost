@@ -2,12 +2,10 @@
  * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
 */
-#include "main.h"
-
+#include "qc_plat_al.h"
+#include "qc_os_al.h"
 #include "led.h"
 
-#include "FreeRTOS.h"
-#include "task.h"
 
 #define CLI_print printf
 
@@ -21,13 +19,13 @@ static void ledGreenTask(void* argument)
 
     while(1)
     {
-        HAL_GPIO_TogglePin(LED_GREEN_GPIO_Port, LED_GREEN_Pin);
-        vTaskDelay(1000/portTICK_PERIOD_MS);
+        qc_hal_gpio_toggle(QC_HAL_LED_GREEN_GPIO_Port, QC_HAL_LED_GREEN_Pin);
+        qc_osal_task_delay(1000/QC_OSAL_portTICK_PERIOD_MS);
 //        printf("9");
 
     }
 
-    vTaskDelete(NULL);
+    qc_osal_thread_delete(NULL);
 }
 
 static void ledBlueTask(void* argument)
@@ -36,11 +34,11 @@ static void ledBlueTask(void* argument)
 
     while(1)
     {
-        HAL_GPIO_TogglePin(LED_BLUE_GPIO_Port, LED_BLUE_Pin);
-        vTaskDelay(500/portTICK_PERIOD_MS);
+        qc_hal_gpio_toggle(QC_HAL_LED_BLUE_GPIO_Port, QC_HAL_LED_BLUE_Pin);
+        qc_osal_task_delay(500/QC_OSAL_portTICK_PERIOD_MS);
     }
 
-    vTaskDelete(NULL);
+    qc_osal_thread_delete(NULL);
 }
 
 static void ledRedTask(void* argument)
@@ -49,16 +47,16 @@ static void ledRedTask(void* argument)
 
     while(1)
     {
-        HAL_GPIO_TogglePin(LED_RED_GPIO_Port, LED_RED_Pin);
-        vTaskDelay(1000/portTICK_PERIOD_MS);
+        qc_hal_gpio_toggle(QC_HAL_LED_RED_GPIO_Port, QC_HAL_LED_RED_Pin);
+        qc_osal_task_delay(1000/QC_OSAL_portTICK_PERIOD_MS);
     }
 
-    vTaskDelete(NULL);
+    qc_osal_thread_delete(NULL);
 }
 
 void LED_taskInit(void)
 {
-    xTaskCreate(ledBlueTask, "ledBlueTask", 256, NULL, tskIDLE_PRIORITY + 5, NULL);
-    xTaskCreate(ledGreenTask, "ledGreenTask", 256, NULL, tskIDLE_PRIORITY + 5, NULL);
-    xTaskCreate(ledRedTask, "redGreenTask", 256, NULL, tskIDLE_PRIORITY + 5, NULL);
+    qc_osal_thread_create(ledBlueTask, "ledBlueTask", 256, NULL, QC_OSAL_tskIDLE_PRIORITY + 5, NULL);
+    qc_osal_thread_create(ledGreenTask, "ledGreenTask", 256, NULL, QC_OSAL_tskIDLE_PRIORITY + 5, NULL);
+    qc_osal_thread_create(ledRedTask, "redGreenTask", 256, NULL, QC_OSAL_tskIDLE_PRIORITY + 5, NULL);
 }

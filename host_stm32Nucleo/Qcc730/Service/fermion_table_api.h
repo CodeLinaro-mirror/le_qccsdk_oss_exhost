@@ -34,6 +34,8 @@
 #define FERM_MAJOR_VER          (0)
 #define FERM_MINOR_VER          (2)
 
+#define QCC730_MAC_REGION_LEN    6
+
 /* Macro for early drop version 04/18 */
 #define NEW_RING1
 /*------------------------------------------------------------------------
@@ -92,10 +94,13 @@ FERM_STRUCT_SIZE_SYNC(fermion_dfu_defaults_t, (60));
 typedef struct fermion_defaults {
 	uint32_t table_hdr; /* Table Header pattern for host verification */
 	uint16_t table_len; /* Table length for host verification */
-	uint16_t reserved1;
+	uint16_t reserved0;
 
 	uint16_t  ferm_maj_ver;  /* Fermion Major version for Host verification */
 	uint16_t  ferm_min_ver;  /* Fermion Minor version for Host verification */
+
+	uint8_t mac_addr[QCC730_MAC_REGION_LEN];  /*WLAN Device Mac Address*/
+	uint16_t reserved1;
 
 	uint8_t num_a2f_rings;  /* Number of rings supported in A2F direction  */
 	uint8_t num_f2a_rings;  /* Number of rings supported in F2A direction  */
@@ -162,6 +167,6 @@ FERM_STRUCT_4BYTE_ALLIGN_CHECK(fermion_defaults_t)
 #ifndef NEW_RING1
 FERM_STRUCT_SIZE_SYNC(fermion_defaults_t, (76))
 #else
-FERM_STRUCT_SIZE_SYNC(fermion_defaults_t, (76+28))
+FERM_STRUCT_SIZE_SYNC(fermion_defaults_t, (112))
 #endif
 #endif /* FERMION_TABLE_API_H */

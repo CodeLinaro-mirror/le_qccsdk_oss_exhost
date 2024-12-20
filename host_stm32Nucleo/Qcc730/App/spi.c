@@ -3,12 +3,12 @@
  * SPDX-License-Identifier: BSD-3-Clause-Clear
 */
 
+#include <qc_plat_al.h>
 #include "transport_layer.h"
 #include "qcspi_driver.h"
 #include "spi.h"
-#include "qcspi_hal.h"
 
-//SPI_HandleTypeDef hspi1;
+//QC_HAL_SPI_HandleTypeDef hspi1;
 /* Buffer used for transmission */
 uint8_t aTxBuffer[1500]={0};
 
@@ -29,10 +29,10 @@ uint32_t SPI_Read(uint8_t* rcv_buf, uint16_t size, uint32_t address)
 	uint32_t status=0;
 
 	if(!rcv_buf)
-		return STM_ERROR_NULLPTR;
+		return QC_PLAT_ERROR_NULLPTR;
 ;
 	/* update the TRNS_LEN */
-	if(HAL_OK!=qcspi_IRW(0, SPI_SLAVE_TRNS_LEN, size<<16))
+	if(QC_HAL_OK!=qcspi_IRW(0, SPI_SLAVE_TRNS_LEN, size<<16))
 		dbg_print("TRNS_LEN update error\r\n");
 
 	memset(op_buf, 0, size);
@@ -51,12 +51,12 @@ uint32_t SPI_Read(uint8_t* rcv_buf, uint16_t size, uint32_t address)
 		dbg_print("@[%d]=%02x ",i,op_buf[i]);
 #endif
 	/*todo: should size be +size if setting TRNS_LEN */
-	if(HAL_OK == qcspi_transfer(&hspi1, (uint8_t *)op_buf, (uint8_t *)aRxBuffer, 15+size))
+	if(QC_HAL_OK == qcspi_transfer(&hspi1, (uint8_t *)op_buf, (uint8_t *)aRxBuffer, 15+size))
 	{
 		//wait until READ bulk is completed
 		while((retry++)<QCSPI_MAX_INIT_TRY_TIMES)
 		{
-			if(STM_OK == qcspi_RDSR(0,&status))
+			if(QC_PLAT_OK == qcspi_RDSR(0,&status))
 			{
 				if(BIT_CHECK(status, 28))
 				{
@@ -69,7 +69,7 @@ uint32_t SPI_Read(uint8_t* rcv_buf, uint16_t size, uint32_t address)
 			}
 			//dbg_print("read retry %d %x tick=%x\r\n",retry,status,HAL_GetTick());
 //			HAL_Delay(1);
-			QC_DELAY(1);
+			qc_hal_delay(1);
 		}
 	}
 #if 0
@@ -80,7 +80,7 @@ uint32_t SPI_Read(uint8_t* rcv_buf, uint16_t size, uint32_t address)
 #endif
 	memcpy(rcv_buf, aRxBuffer+op_offset, size);
 
-	return STM_OK;
+	return QC_PLAT_OK;
 }
 
 uint32_t SPI_Write(uint8_t* snd_buf, uint16_t size, uint32_t address)
@@ -91,10 +91,10 @@ uint32_t SPI_Write(uint8_t* snd_buf, uint16_t size, uint32_t address)
 	uint32_t status=0;
 
 	if(!snd_buf)
-		return STM_ERROR_NULLPTR;
+		return QC_PLAT_ERROR_NULLPTR;
 
 	/* update the TRNS_LEN */
-	if(HAL_OK!=qcspi_IRW(0, SPI_SLAVE_TRNS_LEN, size<<16))
+	if(QC_HAL_OK!=qcspi_IRW(0, SPI_SLAVE_TRNS_LEN, size<<16))
 		dbg_print("TRNS_LEN update error\r\n");
 
 	memset(op_buf, 0, size);
@@ -111,12 +111,12 @@ uint32_t SPI_Write(uint8_t* snd_buf, uint16_t size, uint32_t address)
 	memcpy(op_buf+op_offset, snd_buf, size);
 
 	/*todo: should size be +size if setting TRNS_LEN */
-	if(HAL_OK == qcspi_transfer(&hspi1, (uint8_t *)op_buf, (uint8_t *)aRxBuffer, 5+size))
+	if(QC_HAL_OK == qcspi_transfer(&hspi1, (uint8_t *)op_buf, (uint8_t *)aRxBuffer, 5+size))
 	{
 		//wait until write is completed -- to check!
 		while((retry++)<QCSPI_MAX_INIT_TRY_TIMES)
 		{
-			if(STM_OK == qcspi_RDSR(0,&status))
+			if(QC_PLAT_OK == qcspi_RDSR(0,&status))
 			{
 				if(retry>1)
 					dbg_print("$");
@@ -130,7 +130,7 @@ uint32_t SPI_Write(uint8_t* snd_buf, uint16_t size, uint32_t address)
 				}
 			}
 			//dbg_print("write retry %d %x tick=%x\r\n",retry,status,HAL_GetTick());
-			QC_DELAY(1);
+			qc_hal_delay(1);
 		}
 	}
 #if 0
@@ -138,6 +138,6 @@ uint32_t SPI_Write(uint8_t* snd_buf, uint16_t size, uint32_t address)
 			dbg_print(" %02x ",op_buf[i]);
 	dbg_print("END SPI_Write\r\n");
 #endif
-	return STM_OK;
+	return QC_PLAT_OK;
 }
 

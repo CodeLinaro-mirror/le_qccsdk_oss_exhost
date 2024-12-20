@@ -2,7 +2,6 @@
  * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
 */
-
 #include "shell.h"
 
 typedef struct{
@@ -15,9 +14,9 @@ typedef struct{
 #define SHELL_FUNC_LIST_MAX_SIZE 12
 #define SHELL_CMD_MAX_SIZE 8
 #define SHELL_ARGC_MAX 4
-#define SHELL_BUFFER_SIZE 32
+#define SHELL_BUFFER_SIZE 1500
 
-UART_HandleTypeDef* shell_huart = NULL;
+QC_HAL_UART_HandleTypeDef* shell_huart = NULL;
 
 char starting[] = "\r\n\r\n==== command Shell ====\r\n";
 char prompt[] = "STM32 >> ";
@@ -31,10 +30,10 @@ uint8_t it_uart_rx_ready = 0;
 static int shell_func_list_size = 0;
 static shell_func_t shell_func_list[SHELL_FUNC_LIST_MAX_SIZE];
 
-QueueHandle_t qShell;
+qc_osal_queue_handle_t qShell;
 
 uint8_t uart_write(char *s, uint16_t size) {
-	if(HAL_OK != HAL_UART_Transmit(shell_huart, (uint8_t*)s, size, 0xFFFF)){
+	if(QC_HAL_OK != QC_HAL_UART_Transmit(shell_huart, (uint8_t*)s, size, 0xFFFF)){
 		return 1;
 	}
 	return 0;
@@ -57,18 +56,19 @@ uint8_t cmd_sh_example(int argc, char ** argv) {
 }
 
 
-uint8_t cmd_shell_init(UART_HandleTypeDef* huart) {
+uint8_t cmd_shell_init(QC_HAL_UART_HandleTypeDef* huart) {
 	shell_huart = huart;
 
 	uart_write(starting,sizeof(starting));
 	uart_write(prompt,sizeof(prompt));
-
+#ifndef QCC730_ATCMD_ENABLE
 	cmd_shell_add("help", (void *)cmd_sh_help, "show help");
+#endif
 //	cmd_shell_add("Eg:", (void *)cmd_sh_example, "Example");
 
-	qShell = xQueueCreate(1,sizeof(char));
+	qShell = qc_osal_queue_create(1,sizeof(char));
 
-	if(HAL_OK != HAL_UART_Receive_IT(shell_huart, (uint8_t*)&c, 1)){
+	if(QC_HAL_OK != QC_HAL_UART_Receive_IT(shell_huart, (uint8_t*)&c, 1)){
 		return 1;
 	}
 	return 0;
@@ -87,15 +87,30 @@ uint8_t cmd_shell_add(char * cmd, int (* pfunc)(int argc, char ** argv), char * 
 }
 
 uint8_t cmd_shell_char_received() {
-	xQueueReceive(qShell, &c, portMAX_DELAY);
+	qc_osal_queue_msg_receive(qShell, &c, QC_OSAL_portMAX_DELAY);
 
 	switch (c) {
 	case '\r':
 		// ENTER key pressed
 		printf("\r\n");
+#ifdef QCC730_ATCMD_ENABLE
+    if (strncmp(buf, "help", 4) == 0) {        
+		cmd_shell_exec(buf);
+    } 
+	else if (strncmp(buf, "parser", 6) == 0){
+		cmd_shell_exec(buf);
+	}
+	else if (buf[0] != '\r') {
+	    buf[pos++] = '\r';
+    	extern void qcc730_atcmd_send_handler(uint8_t *cmd, uint32_t len);
+        qcc730_atcmd_send_handler(buf, pos);
+		memset(buf, 0, SHELL_BUFFER_SIZE);
+	}
+#else
+		cmd_shell_exec(buf);
+#endif
 		buf[pos++] = 0;
 		pos = 0;
-		cmd_shell_exec(buf);
 		uart_write(prompt,sizeof(prompt));
 		break;
 
@@ -115,6 +130,22 @@ uint8_t cmd_shell_char_received() {
 	}
 
 	return 0;
+}
+uint8_t cmd_shell_find_command_index(int *index, char *header, int len)
+{
+	int i = 0;
+	
+	for(i = 0 ; i < shell_func_list_size ; i++) {
+		if (!strncmp(shell_func_list[i].cmd, header, len)) {
+			*index = i;
+			return 0;
+		}
+	}
+	return -1;
+}
+uint8_t cmd_shell_exec_function_by_index(int argc, char * argv, int index)
+{
+	return shell_func_list[index].func(argc, argv);
 }
 
 uint8_t cmd_shell_exec(char * cmd) {

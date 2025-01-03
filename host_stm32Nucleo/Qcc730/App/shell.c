@@ -104,13 +104,13 @@ uint8_t cmd_shell_char_received() {
 	    buf[pos++] = '\r';
     	extern void qcc730_atcmd_send_handler(uint8_t *cmd, uint32_t len);
         qcc730_atcmd_send_handler(buf, pos);
-		memset(buf, 0, SHELL_BUFFER_SIZE);
 	}
 #else
 		cmd_shell_exec(buf);
 #endif
 		buf[pos++] = 0;
 		pos = 0;
+		memset(buf,0,SHELL_BUFFER_SIZE);
 		uart_write(prompt,sizeof(prompt));
 		break;
 

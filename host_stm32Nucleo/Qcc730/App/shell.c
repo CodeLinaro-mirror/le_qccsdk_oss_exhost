@@ -12,7 +12,7 @@ typedef struct{
 
 
 #define SHELL_FUNC_LIST_MAX_SIZE 12
-#define SHELL_CMD_MAX_SIZE 8
+#define SHELL_CMD_MAX_SIZE 32
 #define SHELL_ARGC_MAX 4
 #define SHELL_BUFFER_SIZE 1500
 
@@ -22,7 +22,7 @@ char starting[] = "\r\n\r\n==== command Shell ====\r\n";
 char prompt[] = "STM32 >> ";
 
 char c = 0; // character received
-uint8_t pos = 0; // current buffer index
+uint32_t pos = 0; // current buffer index
 static char buf[SHELL_BUFFER_SIZE];
 static char backspace[] = "\b \b";
 uint8_t it_uart_rx_ready = 0;

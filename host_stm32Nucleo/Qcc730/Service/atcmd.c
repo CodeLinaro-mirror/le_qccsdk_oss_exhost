@@ -41,9 +41,9 @@ void qcc730_atcmd_spi_trans_task(void * pvParameters)
 			if(0 == qapi_spi_ring_read(rxbuf, &rx_buf_len, F2A_DATA_RING_ID, &info_type))
 			{
 			    sendbuf = (uint8_t *)qc_osal_allocate_memory(ATCMD_BUF_LEN);
-				memset(sendbuf, 0, ATCMD_BUF_LEN);
 				if (sendbuf)
 				{
+  				    memset(sendbuf, 0, ATCMD_BUF_LEN);
 				    memcpy(sendbuf, rxbuf, rx_buf_len);
 					memset(&node, 0, sizeof(node));
 					node.payload_len = rx_buf_len;
@@ -94,7 +94,7 @@ void qcc730_atcmd_init()
 	assert(qcc730_atcmd);
 
 	memset(qcc730_atcmd, 0, sizeof(qcc730_atcmd_t));
-	/* spi handshake semaphore */
+	/* spi semaphore */
 	qcc730_atcmd->semaphore = qc_osal_semaphore_create(QC_OSAL_SEMP_MAX_COUNT, QC_OSAL_SEMP_INIT_COUNT, NULL);
 	assert(qcc730_atcmd->semaphore);
 	

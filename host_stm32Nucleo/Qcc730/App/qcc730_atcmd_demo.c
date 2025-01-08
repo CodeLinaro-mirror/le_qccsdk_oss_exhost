@@ -143,9 +143,6 @@ uint8_t atcmd_response_handler(uint16_t buf_len, char * cmd) {
 	// Searching for the command and parameters
 	if(0 == atcmd_parser_find_command_index(&i, header, h))
 	{
-		printf("Response before parsing:\r\n");
-		printf("%s\r\n", cmd);
-
 		argc = 1;
 		cmd += arg_start+1;
 		argv[0] = cmd;
@@ -174,13 +171,8 @@ uint8_t atcmd_response_handler(uint16_t buf_len, char * cmd) {
 		printf("Response after parsing:\r\n");
 		return atcmd_parser_exec_function_by_index(argc, argv, i);
 	}
-	else
-	{
-		printf("%s\r\n", cmd);
-		return 0;
-	}
 	
-	return -1;
+	return 0;
 }
 
 void qcc730_atcmd_send_handler(uint8_t *cmd, uint32_t len)
@@ -212,12 +204,24 @@ void qcc730_atcmd_send_handler(uint8_t *cmd, uint32_t len)
     qapi_atcmd_send(cmd, len);
 }
 
+void print_atcmd_resp(uint8_t *data, uint32_t len)
+{
+    if (!strncmp(&data[2], "+CMD:", 5))
+    {
+        /* Only Work around for Uart and SPI conflict on STM32 platform under some conditiontion*/
+        qc_osal_task_delay(1000/QC_OSAL_portTICK_PERIOD_MS);
+    }
+	
+	printf("%s\r\n", data);	
+}
+
 void qcc730_atcmd_recv_callback(uint8_t *data, uint32_t len)
 {    
-	if(qat_demo_parser_enable == 0)
-		printf("%s", data);
-	else
-		atcmd_response_handler(len, data);
+	print_atcmd_resp(data, len);
+	if (qat_demo_parser_enable) 
+	{
+	    atcmd_response_handler(len, data);
+	}
 }
 
 #ifdef SHELL_FEATURE

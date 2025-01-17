@@ -13,7 +13,7 @@ typedef struct{
 
 #define SHELL_FUNC_LIST_MAX_SIZE 12
 #define SHELL_CMD_MAX_SIZE 32
-#define SHELL_ARGC_MAX 4
+#define SHELL_ARGC_MAX 8
 #define SHELL_BUFFER_SIZE 1500
 
 QC_HAL_UART_HandleTypeDef* shell_huart = NULL;
@@ -98,6 +98,15 @@ uint8_t cmd_shell_char_received() {
 		cmd_shell_exec(buf);
     } 
 	else if (strncmp(buf, "parser", 6) == 0){
+		cmd_shell_exec(buf);
+	}
+	else if (strncmp(buf, "qatperf", 7) == 0){
+		cmd_shell_exec(buf);
+	}
+	else if (strncmp(buf, "tx", 2) == 0){
+		cmd_shell_exec(buf);
+	}
+	else if (strncmp(buf, "rx_mqtt", 2) == 0){
 		cmd_shell_exec(buf);
 	}
 	else if (buf[0] != '\r') {

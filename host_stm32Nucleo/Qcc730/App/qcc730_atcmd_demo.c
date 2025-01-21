@@ -296,10 +296,14 @@ static void atcmd_demo_rx_mqtt(void)
 		if(rx_mqtt_test_param->start_tick > 0)
 			end_timeout = qc_osal_get_ticks();
 		
-		if((end_timeout - rx_mqtt_test_param->start_tick > timeout) && (rx_mqtt_test_param->mqtt_recv_count > 0))
+		if(end_timeout > rx_mqtt_test_param->start_tick)
 		{
-			demo_print("timeout, packet loss may happened\r\n", num);
-			break;
+			if( (end_timeout - rx_mqtt_test_param->start_tick > timeout) 
+			&& (rx_mqtt_test_param->mqtt_recv_count > 0))
+			{
+				demo_print("timeout, packet loss may happened\r\n", num);
+				break;
+			}
 		}
 
 		if(rx_mqtt_test_param->task_started == 0)

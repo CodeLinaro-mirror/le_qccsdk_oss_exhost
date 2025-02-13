@@ -27,8 +27,8 @@ typedef struct{
 	int len;
 	int mqtt_recv_count;
 	int mqtt_recv_timeout;
-	qc_osal_tick_type_t start_tick;
-	qc_osal_tick_type_t end_tick;
+	uint32_t start_tick;
+	uint32_t end_tick;
 } atcmd_mqtt_rx_test_t;
 
 typedef struct{
@@ -49,6 +49,7 @@ static atcmd_parser_func_t atcmd_parser_resp_func_list[ATCMD_PARSER_FUNC_LIST_MA
 static atcmd_parser_func_t atcmd_parser_evt_func_list[ATCMD_PARSER_FUNC_LIST_MAX_SIZE];
 
 atcmd_mqtt_rx_test_t *rx_mqtt_test_param = NULL;
+uint8_t tx_test_start = 0;
 
 void qcc730_atcmd_send_handler(uint8_t *cmd, uint32_t len);
 
@@ -66,7 +67,7 @@ uint8_t atcmd_parser_find_command_index(int *index, char *header, int len, int f
 	if(flag == QAT_RESP_TYPE)
 	{
 		for(i = 0 ; i < atcmd_parser_resp_func_list_size ; i++) {
-			if (!strncmp(atcmd_parser_resp_func_list[i].cmd, header, len)) {
+			if (!strcmp(atcmd_parser_resp_func_list[i].cmd, header)) {
 				*index = i;
 				return 0;
 			}
@@ -75,7 +76,7 @@ uint8_t atcmd_parser_find_command_index(int *index, char *header, int len, int f
 	else if(flag == QAT_EVT_TYPE)
 	{
 		for(i = 0 ; i < atcmd_parser_evt_func_list_size ; i++) {
-			if (!strncmp(atcmd_parser_evt_func_list[i].cmd, header, len)) {
+			if (!strcmp(atcmd_parser_evt_func_list[i].cmd, header)) {
 				*index = i;
 				return 0;
 			}
@@ -226,6 +227,8 @@ static void atcmd_demo_tx(uint32_t num, uint32_t size)
 	TickType_t currentTick = 0;
 	TickType_t endTick = 0;
 
+	tx_test_start = 1;
+	
 	srand(time(NULL));
 	
 	for(j=0;j<sizeof(write_buf);j++)
@@ -259,6 +262,8 @@ static void atcmd_demo_tx(uint32_t num, uint32_t size)
 	printf("tx speed = %d(bits/sec)\r\n", (count*buf_len*8)*1000/(end-start));
 	
 	printf("send %d bits time:[now]=%d,start=%d, take ticks = %d, interval:%d ms\r\n", count*buf_len*8,end, start, end-start, ((end-start)*1000/configTICK_RATE_HZ));
+
+	tx_test_start = 0;
 }
 
 uint32_t obtain_mqtt_pub_recv_count(void)
@@ -272,40 +277,46 @@ static void atcmd_demo_rx_mqtt(void)
 	uint32_t diff = 0;
 	uint32_t bits = 0;
 	uint32_t result = 0;
-	uint16_t timeout = 10000;
+	//uint32_t timeout = 10000;
 
-	qc_osal_tick_type_t end_timeout = qc_osal_get_ticks();
+	//uint32_t end_timeout = qc_osal_get_ticks();
 	
 	num = (uint16_t)rx_mqtt_test_param->num;
 	len = (uint16_t)rx_mqtt_test_param->len;
 	
-	if(rx_mqtt_test_param->mqtt_recv_timeout > 0)	
-		timeout = (uint16_t)rx_mqtt_test_param->mqtt_recv_timeout;
+	//if(rx_mqtt_test_param->mqtt_recv_timeout > 0)	
+	//	timeout = (uint32_t)rx_mqtt_test_param->mqtt_recv_timeout;
 	
 	rx_mqtt_test_param->task_started = 1;
 	rx_mqtt_test_param->start_tick = 0;
 
 	start = obtain_mqtt_pub_recv_count();
 	
-	demo_print("wait %d(ms) to receive %d packets\r\n", timeout, num);
+	//demo_print("wait %d(ms) to receive %d packets\r\n", timeout, num);
+	demo_print("wait to receive %d packets\r\n", num);
 	
 	while(received < num)
 	{
 		received = obtain_mqtt_pub_recv_count() - start;
 
+		/*
 		if(rx_mqtt_test_param->start_tick > 0)
 			end_timeout = qc_osal_get_ticks();
 		
-		if(end_timeout > rx_mqtt_test_param->start_tick)
+		if(end_timeout - rx_mqtt_test_param->start_tick > 0)
 		{
 			if( (end_timeout - rx_mqtt_test_param->start_tick > timeout) 
 			&& (rx_mqtt_test_param->mqtt_recv_count > 0))
 			{
-				demo_print("timeout, packet loss may happened\r\n", num);
+				demo_print("rx_mqtt_test_param->mqtt_recv_count = %d\r\n", rx_mqtt_test_param->mqtt_recv_count);
+				demo_print("end_timeout = %d\r\n", end_timeout);
+				demo_print("rx_mqtt_test_param->start_tick = %d\r\n", rx_mqtt_test_param->start_tick);
+				demo_print("timeout, packet loss may happened\r\n");
 				break;
 			}
 		}
-
+		*/
+		
 		if(rx_mqtt_test_param->task_started == 0)
 		{
 			demo_print("test running but stopped by cmd\r\n");
@@ -325,7 +336,7 @@ static void atcmd_demo_rx_mqtt(void)
 	qc_osal_thread_delete(NULL);
 }
 
-void atcmd_response_parser_RDMEM(int argc, char ** argv, char *orig_cmd)
+void atcmd_response_parser_RDMEM(int argc, uint32_t ** argv, char *orig_cmd)
 {
 	printf("Response after parsing +RDMEM:\r\n");
 	if(argc == 4)
@@ -344,7 +355,37 @@ void atcmd_response_parser_RDMEM(int argc, char ** argv, char *orig_cmd)
 	}
 }
 
-void atcmd_response_parser_CIPDHCPV4C(int argc, char ** argv, char *orig_cmd)
+void atcmd_response_parser_IPDHEX(int argc, uint32_t ** argv, char *orig_cmd)
+{
+	int i = 0;
+	uint8_t *buf = NULL;
+	uint32_t buf_len = 0;
+	
+	if(argc == 5)
+	{
+		buf_len = atoi(argv[3]);
+		if(buf_len != 0)
+		{
+			buf = (uint8_t*)malloc(buf_len);
+			memset(buf, 0, buf_len);
+			memcpy(buf, argv[4], buf_len);
+			
+			printf("+IPDHEX:%s,%s,%d,%d,",argv[0],argv[1],atoi(argv[2]),atoi(argv[3]));
+			
+			for(i = 0; i<buf_len;i++)
+				printf("%x",*buf++);
+
+			free(buf);
+		}
+	}
+	else
+		printf("%s",orig_cmd);
+	
+	
+
+}
+
+void atcmd_response_parser_CIPDHCPV4C(int argc, uint32_t ** argv, char *orig_cmd)
 {
 	printf("Response after parsing +CIPDHCPV4C:\r\n");
 	if(argc == 5)
@@ -364,7 +405,7 @@ void atcmd_response_parser_CIPDHCPV4C(int argc, char ** argv, char *orig_cmd)
 	}
 }
 
-void atcmd_response_parser_EVT_MQTTSUBRECV(int argc, char ** argv, char *orig_cmd)
+void atcmd_response_parser_EVT_MQTTSUBRECV(int argc, uint32_t ** argv, char *orig_cmd)
 {
 	//printf("%s \r\n",orig_cmd);
 	rx_mqtt_test_param->mqtt_recv_count++;
@@ -374,9 +415,37 @@ void atcmd_response_parser_EVT_MQTTSUBRECV(int argc, char ** argv, char *orig_cm
 		
 }
 
+void atcmd_response_parser_EVT_MQTTSUBRECVHEX(int argc, uint32_t ** argv, char *orig_cmd)
+{
+	int i = 0;
+	uint8_t *buf = NULL;
+	uint32_t buf_len = 0;
+	
+	if(argc == 4)
+	{
+		buf_len = atoi(argv[2]);
+		if(buf_len != 0)
+		{
+			buf = (uint8_t*)malloc(buf_len);
+			memset(buf, 0, buf_len);
+			memcpy(buf, argv[3], buf_len);
+			
+			printf("+EVT:MQTT_SUBRECVHEX:%s,%s,%s,",argv[0],argv[1],argv[2]);
+			for(i = 0; i<buf_len;i++)
+				printf("%x",*buf++);
+
+			free(buf);
+		}
+	}
+	else
+		printf("%s",orig_cmd);
+		
+}
+
+
 uint8_t atcmd_response_handler(uint16_t buf_len, char * cmd) {
 	int argc;
-	char * argv[AT_ARGC_MAX]={0};
+	uint32_t * argv[AT_ARGC_MAX]={0};
 	char original_cmd[AT_RESPONSE_MAX]={0};
 	char *p;
 	int comma_found=0;
@@ -555,6 +624,14 @@ void print_atcmd_resp(uint8_t *data, uint32_t len)
         /* Only Work around for Uart and SPI conflict on STM32 platform under some conditiontion*/
         qc_osal_task_delay(1000/QC_OSAL_portTICK_PERIOD_MS);
     }
+	if (!strncmp(&data[0], "+IPDHEX:", 8))
+    {
+        return;
+    }
+	if (!strncmp(&data[0], "+EVT:MQTT_SUBRECVHEX", 20))
+    {
+        return;
+    }
 	
 	printf("%s\r\n", data);	
 }
@@ -574,11 +651,13 @@ void qcc730_atcmd_recv_callback(uint8_t *data, uint32_t len)
 void atcmd_add_evt_parser(void)
 {
 	atcmd_parser_func_add("+EVT:MQTT_SUBRECV", (void*)atcmd_response_parser_EVT_MQTTSUBRECV, "parse EVT_MQTTSUBRECV response", QAT_EVT_TYPE);
+	atcmd_parser_func_add("+EVT:MQTT_SUBRECVHEX", (void*)atcmd_response_parser_EVT_MQTTSUBRECVHEX, "parse EVT_MQTTSUBRECVHEX response", QAT_EVT_TYPE);
 }
 void atcmd_add_command_parser(void)
 {
 	atcmd_parser_func_add("+CIPDHCPV4C", (void*)atcmd_response_parser_CIPDHCPV4C, "parse CIPDHCPV4C response", QAT_RESP_TYPE);
 	atcmd_parser_func_add("+RDMEM", (void*)atcmd_response_parser_RDMEM, "parse RDMEM response", QAT_RESP_TYPE);
+	atcmd_parser_func_add("+IPDHEX", (void*)atcmd_response_parser_IPDHEX, "parse +IPD response", QAT_RESP_TYPE);
 }
 void vTaskShell(void * p) {
 	cmd_shell_init(&(UART_DEVICE));

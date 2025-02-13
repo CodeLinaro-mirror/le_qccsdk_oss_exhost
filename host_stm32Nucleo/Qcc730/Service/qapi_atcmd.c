@@ -8,6 +8,8 @@
 #include "qapi_spi.h"
 #include "qapi_atcmd.h"
 
+extern uint8_t tx_test_start;
+
 int32_t qapi_atcmd_get_spi_state(void)
 {
     if (qcc730_atcmd)
@@ -39,7 +41,9 @@ int32_t qapi_atcmd_send(uint8_t *cmd, uint32_t len)
  	uint8_t *txbuf = qcc730_atcmd->tx_buf;
 	uint32_t sent_len = 0;
 
-    atcmd_print("atcmd send: %d %s\r\n", len ,cmd);
+	if(tx_test_start == 0)
+    	atcmd_print("atcmd send: %d %s\r\n", len ,cmd);
+	
     while(len >= ATCMD_BUF_LEN)
     {
         memcpy(txbuf, cmd+sent_len, ATCMD_BUF_LEN);

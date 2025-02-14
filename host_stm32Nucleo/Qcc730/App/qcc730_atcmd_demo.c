@@ -623,6 +623,8 @@ void print_atcmd_resp(uint8_t *data, uint32_t len)
     {
         /* Only Work around for Uart and SPI conflict on STM32 platform under some conditiontion*/
         qc_osal_task_delay(1000/QC_OSAL_portTICK_PERIOD_MS);
+		printf("%s", data);	
+		return;
     }
 	if (!strncmp(&data[0], "+IPDHEX:", 8))
     {

@@ -372,11 +372,13 @@ static void spiTxTask(void* argument)
     qc_osal_thread_delete(NULL);
 }
 
-void spi_raw_test(uint32_t num, uint32_t size)
+void spi_raw_test(uint32_t address, uint32_t num, uint32_t size)
 {
 	struct device_id id = {0};
 	uint32_t j;
 	uint32_t count=0, buf_len=0;
+	uint32_t write_addr = 0;
+	
 	if (QAPI_OK != qapi_spi_get_slaveid(&id))
 	{
 	    demo_print("Slave Id=%x %x %x\r\n", id.array[0],id.array[1],id.array[2]);
@@ -384,13 +386,14 @@ void spi_raw_test(uint32_t num, uint32_t size)
 	}
 
 	#define ACCESS_LEN 1400
-	#define ACCESS_ADDR	0x33830
+	#define ACCESS_ADDR	0x9f000
 
 	uint8_t buf[ACCESS_LEN]={0};
 	uint8_t w_buf[ACCESS_LEN]={0};
 
 	count = (num==0 || num>MAX_LOOP)? 10:num;
 	buf_len = (size==0 || size>ACCESS_LEN)? 1400:size;
+	write_addr = (address==0 || address>ACCESS_ADDR)? ACCESS_ADDR:address;
 
 	demo_print("format write buffer for loop=%d, len=%d\r\n",count, buf_len);
 	for(j=0;j<buf_len;j++)
@@ -399,9 +402,9 @@ void spi_raw_test(uint32_t num, uint32_t size)
 	qc_osal_tick_type_t time1 = qc_osal_get_ticks();
 	for(j=0;j<count/*TEST_CYCLE*/;j++)
 	{
-		SPI_Write(w_buf, buf_len, ACCESS_ADDR);
+		SPI_Write(w_buf, buf_len, write_addr);
 
-		SPI_Read(buf, buf_len, ACCESS_ADDR);
+		SPI_Read(buf, buf_len, write_addr);
         if (memcmp(w_buf, buf, buf_len))
         {
             demo_print("There is a mismatch between received data and sent data.\r\n");
@@ -590,10 +593,15 @@ int test_wakeup_reset(int argc, char ** argv){
 int test_qcspi_raw(int argc, char ** argv){
 //	demo_print("test_qcspi_raw arc=%d %s [%s]\r\n",argc, argv[1], argv[2]);
 	int cnt=0,size=0;
+	uint32_t addr = 0;
 
 	sscanf(argv[1],"%d",&cnt);
 	sscanf(argv[2],"%d",&size);
-	spi_raw_test(cnt, size);
+
+	if(argv[3])
+		sscanf(argv[3],"%x",&addr);
+	
+	spi_raw_test(addr, cnt, size);
 
 	return 0;
 }
@@ -676,7 +684,7 @@ void vTaskShell(void * p) {
 	cmd_shell_add("read", (void*)test_qcspi_read, "read [addr]");
 	cmd_shell_add("start", (void*)test_qcspi_start, "start [mode=0/1/2]");
 
-	cmd_shell_add("raw", (void*)test_qcspi_raw, "raw [cnt] [size]");
+	cmd_shell_add("raw", (void*)test_qcspi_raw, "raw [addr] [cnt] [size]");
 
 	cmd_shell_add("tx", (void*)test_qcspi_tx, "tx [cnt] [size]");
 	cmd_shell_add("rx", (void*)test_qcspi_rx, "rx [cnt] [size]");

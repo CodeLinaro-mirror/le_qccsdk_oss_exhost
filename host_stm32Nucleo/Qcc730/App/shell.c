@@ -12,8 +12,8 @@ typedef struct{
 
 
 #define SHELL_FUNC_LIST_MAX_SIZE 12
-#define SHELL_CMD_MAX_SIZE 8
-#define SHELL_ARGC_MAX 4
+#define SHELL_CMD_MAX_SIZE 32
+#define SHELL_ARGC_MAX 8
 #define SHELL_BUFFER_SIZE 1500
 
 QC_HAL_UART_HandleTypeDef* shell_huart = NULL;
@@ -22,7 +22,7 @@ char starting[] = "\r\n\r\n==== command Shell ====\r\n";
 char prompt[] = "STM32 >> ";
 
 char c = 0; // character received
-uint8_t pos = 0; // current buffer index
+uint32_t pos = 0; // current buffer index
 static char buf[SHELL_BUFFER_SIZE];
 static char backspace[] = "\b \b";
 uint8_t it_uart_rx_ready = 0;
@@ -100,17 +100,26 @@ uint8_t cmd_shell_char_received() {
 	else if (strncmp(buf, "parser", 6) == 0){
 		cmd_shell_exec(buf);
 	}
+	else if (strncmp(buf, "qatperf", 7) == 0){
+		cmd_shell_exec(buf);
+	}
+	else if (strncmp(buf, "tx", 2) == 0){
+		cmd_shell_exec(buf);
+	}
+	else if (strncmp(buf, "rx_mqtt", 2) == 0){
+		cmd_shell_exec(buf);
+	}
 	else if (buf[0] != '\r') {
 	    buf[pos++] = '\r';
     	extern void qcc730_atcmd_send_handler(uint8_t *cmd, uint32_t len);
         qcc730_atcmd_send_handler(buf, pos);
-		memset(buf, 0, SHELL_BUFFER_SIZE);
 	}
 #else
 		cmd_shell_exec(buf);
 #endif
 		buf[pos++] = 0;
 		pos = 0;
+		memset(buf,0,SHELL_BUFFER_SIZE);
 		uart_write(prompt,sizeof(prompt));
 		break;
 

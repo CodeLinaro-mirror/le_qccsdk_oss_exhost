@@ -51,7 +51,7 @@ typedef TickType_t qc_osal_tick_type_t;
 #define QC_OSAL_portTICK_PERIOD_MS      portTICK_PERIOD_MS
 #define QC_OSAL_portMAX_DELAY           portMAX_DELAY
 
-#define QC_OSAL_SEMP_MAX_COUNT          6
+#define QC_OSAL_SEMP_MAX_COUNT          32
 #define QC_OSAL_SEMP_INIT_COUNT         1
 
 /*Create New Task/Thread and send the handler to caller*/

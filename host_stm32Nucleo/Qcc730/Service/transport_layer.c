@@ -13,7 +13,7 @@
 #define RX_FROM_SLAVE_QUEUE_SIZE             5
 
 qc_osal_semaphore_handle_t osSemaphore;
-static osMutexId_t mutex_spi_trans;
+static qc_osal_osMutexId_t mutex_spi_trans;
 /* Queue declaration */
 static qc_osal_queue_handle_t tx_to_slave_queue = NULL;
 static qc_osal_queue_handle_t rx_from_slave_queue = NULL;

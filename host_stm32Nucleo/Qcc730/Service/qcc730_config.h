@@ -11,4 +11,5 @@
 
 #define QCC730_ATCMD_ENABLE
 //#define QCC730_SPI_DEMO_ENABLE
+//#define QCC730_DFU_DEMO_ENABLE
 #endif

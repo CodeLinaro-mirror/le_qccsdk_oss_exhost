@@ -9,6 +9,7 @@
 #endif
 #include "qapi_spi.h"
 #include "qapi_atcmd.h"
+#include "dfu.h"
 
 #ifdef QCC730_ATCMD_ENABLE
 #define AT_ARGC_MAX      128
@@ -550,6 +551,11 @@ void qcc730_atcmd_send_handler(uint8_t *cmd, uint32_t len)
         return;
     }
 	
+	if(strncasecmp(cmd, "AT+RST", 6) == 0)
+	{
+	    qcc_reset_flag = 1;
+	}
+
     if (QCC730_SPI_NOT_READY == qapi_atcmd_get_spi_state())
     {   
 	    if (QAPI_OK != qapi_spi_get_slaveid(&id))
@@ -691,6 +697,17 @@ void task_init_all(void)
 	if( xReturned == QC_OSAL_ERR_MEM_ALLOCATE_FAILED ) {
 		printf("Task Shell creation error: Could not allocate required memory\r\n");
 	}
+    
+    xReturned = qc_osal_thread_create(
+        vDFU_task,         /* Function that implements the task. */
+        "DFU",            /* Text name for the task. */
+        2048,         /* Stack size in words, not bytes. */
+        (void *) NULL,      /* Parameter passed into the task. */
+        4,                  /* Priority at which the task is created. */
+        NULL);          /* Used to pass out the created task's handle. */
+    if( xReturned == QC_OSAL_ERR_MEM_ALLOCATE_FAILED ) {
+        printf("Task DFU creation error\r\n");
+    }
 
 	memset(atcmd_parser_resp_func_list, 0, ATCMD_PARSER_FUNC_LIST_MAX_SIZE);
 	memset(atcmd_parser_evt_func_list, 0, ATCMD_PARSER_FUNC_LIST_MAX_SIZE);

@@ -111,22 +111,13 @@ typedef struct dfu_ring_handle {
 typedef enum soft_id
 {
     IMG_NIL     = 0x00,
-    //SBL_ID      = 0x01,
     WLAN_IMG_ID = 0x02,
     BDF_ID      = 0x04,
-    //REGDB_ID    = 0x08,
-    //WLAN_INI    = 0x10,
-    //IMG_ALL     = 0x1F,
-
+    CMD_BOOT    = 0x3F,
+    CMD_RESET   = 0x7F,
     ID_MAX      = 0xFF,
 } soft_id_t;
 
-typedef enum cmd_id
-{
-    CMD_RESET   = 0x7F,
-    CMD_BOOT    = 0x3F,
-    CMD_MAX     = 0xFF,
-}cmd_id_t;
 
 typedef enum a2f_dfu_msg_id
 {
@@ -251,14 +242,17 @@ typedef struct dfu_msg
 void read_flash(uint32_t address, uint8_t *buffer, uint32_t size);
 
 //for external usage
-void dfu_app(uint32_t fsize, read_func_t func);
-void dfu_bdf(uint32_t fsize, read_func_t func);
+void dfu_app(uint32_t fsize);
+void dfu_bdf(uint32_t fsize);
 uint8_t onboard_target(void);
 void send_dfu_boot(void);
 void set_target_st_from_app(void);
 target_state_e get_target_st(void);
 void vDFU_task(void *pvParameters);
 ring_init_status_e init_dfu_ring(void);
-
+int is_dfu_cmd(char *buf);
+int dfu_hook(char* buf);
+void register_dfu_func(read_func_t func);
+void init_dfu_cfg(soft_id_t id, uint32_t size);
 
 #endif /*TARGET_DFU_H*/

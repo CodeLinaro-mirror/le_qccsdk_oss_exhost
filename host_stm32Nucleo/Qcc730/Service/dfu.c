@@ -221,7 +221,7 @@ void read_flash(uint32_t address, uint8_t *buffer, uint32_t size)
     //check address
     for(uint32_t i = 0; i< size; i++)
     {
-        buffer[i] = *(uint8_t *)(address + i);
+        buffer[i] = *(uint8_t *)(BIN_ADDR_AT_FLASH+address + i);
     }
 }
 
@@ -633,7 +633,7 @@ static void recieve_and_process_dfu_frame(f2a_dfu_msg_id_t* p_msg_id)
             else
             {
                 //printf("call dfu_cfg.func\r\n");
-                dfu_cfg.func(BIN_ADDR_AT_FLASH+elf_offset, pdata, data_len);
+                dfu_cfg.func(elf_offset, pdata, data_len);
             }
 
             //then call send_dfu_transfer_confirm
@@ -889,10 +889,38 @@ int is_dfu_cmd(char* buf) {
     return -1;
 }
 
+int is_valid_number(const char* str) {
+    if (str == NULL || *str == '\0') {
+        return 0;
+    }
+
+    // Check for hexadecimal number
+    if (strncasecmp(str, "0x", 2) == 0) {
+        str += 2;
+        while (*str) {
+            if (!isxdigit(*str)) {
+                return 0;
+            }
+            str++;
+        }
+        return 1;
+    }
+
+    // Check for decimal number
+    while (*str) {
+        if (!isdigit(*str)) {
+            return 0;
+        }
+        str++;
+    }
+    return 1;
+}
+
 #define SHELL_ARGC_MAX 2
-void check_cmd(char* buf, uint32_t* size)
+int check_cmd(char* buf, uint32_t* size)
 {
     dbg_log("check_cmd: buf:%s\r\n", buf);
+
     int argc = 0;
     char* argv[SHELL_ARGC_MAX];
     char* p = buf;
@@ -901,14 +929,12 @@ void check_cmd(char* buf, uint32_t* size)
         p++;
     }
 
+    argv[argc++] = p;
 
     while(*p != '\0' && argc < SHELL_ARGC_MAX) {
-        if(*p == ' ') {
+        if(*p == '=') {
             *p = "\0";
             p++;
-            while (*p == ' ') {
-                p++;
-            }
             if(*p != '\0') {
                 argv[argc++] = p;
             }
@@ -917,12 +943,32 @@ void check_cmd(char* buf, uint32_t* size)
         }
     }
 
-    if(strncasecmp(argv[0], "0x", 2) == 0 )
-    {
-        *size = (unsigned int)strtol(argv[0], NULL, 16);
+    if (argc < 2) {
+        if (strncasecmp(argv[0], "at+dfuapp", 9) == 0) {
+            printf("\r\n+DFUAPP:ERROR:NO VALID SIZE INFO\r\n");
+        } else if (strncasecmp(argv[0], "at+dfubdf", 9) == 0) {
+            printf("\r\n+DFUBDF:ERROR:NO VALID SIZE INFO\r\n");
+        }
+        return -1;
+    }
 
+    if (is_valid_number(argv[1])) {
+        if(strncasecmp(argv[1], "0x", 2) == 0 )
+        {
+            *size = (unsigned int)strtol(argv[1], NULL, 16);
+
+        } else {
+            *size = (unsigned int)strtol(argv[1], NULL, 10);
+        }
+        return 0;
     } else {
-        *size = (unsigned int)strtol(argv[0], NULL, 10);
+        if (strncasecmp(argv[0], "at+dfuapp", 9) == 0) {
+            printf("\r\n+DFUAPP:ERROR:NO VALID SIZE INFO\r\n");
+        }
+        if (strncasecmp(argv[0], "at+dfubdf", 9) == 0) {
+            printf("\r\n+DFUBDF:ERROR:NO VALID SIZE INFO\r\n");
+        }
+        return -1;
     }
     dbg_log("size:0x%x\r\n", *size);
 }
@@ -933,17 +979,18 @@ int dfu_hook(char* buf)
     dfu_msg_t msg;
     msg.fsize = 0;
     //msg.func = NULL;
+    int ret  = -1;
 
     if(strncasecmp(buf, "AT+DFUBOOT", 10) == 0)
     {
-        dbg_log("\r\nHandle DFUBOOT\r\n");
+        printf("\r\n+DFUBOOT:Handle DFUBOOT\r\n");
         msg.id = CMD_BOOT;
         if (qc_osal_queue_send(xDFU_msg_queue, (void*)&msg, portMAX_DELAY) == pdPASS)
             status = 0;
     }
     else if(strncasecmp(buf, "AT+DFURESET", 11) == 0)
     {
-        dbg_log("\r\nHandle DFURESET\r\n");
+        printf("\r\n+DFUBOOT:Handle DFURESET\r\n");
         msg.id = CMD_RESET;
         if (qc_osal_queue_send(xDFU_msg_queue, (void*)&msg, portMAX_DELAY) == pdPASS)
             status = 0;
@@ -952,7 +999,11 @@ int dfu_hook(char* buf)
     {
         dbg_log("\r\nHandle DFUAPP\r\n");
         msg.id = WLAN_IMG_ID;
-        check_cmd(buf, &(msg.fsize));
+        ret = check_cmd(buf, &(msg.fsize));
+        if (-1 == ret)
+        {
+            return status;
+        }
         dbg_log("msg.fsize:0x%x\r\n", msg.fsize);
         if (qc_osal_queue_send(xDFU_msg_queue, (void*)&msg, portMAX_DELAY) == pdPASS)
             status = 0;
@@ -961,7 +1012,11 @@ int dfu_hook(char* buf)
     {
         dbg_log("\r\nHandle DFUBDF\r\n");
         msg.id = BDF_ID;
-        check_cmd(buf, &(msg.fsize));
+        ret = check_cmd(buf, &(msg.fsize));
+        if (-1 == ret)
+        {
+            return status;
+        }
         dbg_log("msg.fsize:0x%x\r\n", msg.fsize);
         if (qc_osal_queue_send(xDFU_msg_queue, (void*)&msg, portMAX_DELAY) == pdPASS)
             status = 0;

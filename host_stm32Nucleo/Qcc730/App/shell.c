@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: BSD-3-Clause-Clear
 */
 #include "shell.h"
+#include "dfu.h"
 
 typedef struct{
 	char * cmd;
@@ -100,7 +101,11 @@ uint8_t cmd_shell_char_received() {
 	else if (strncmp(buf, "parser", 6) == 0){
 		cmd_shell_exec(buf);
 	}
-	else if (strncmp(buf, "qatperf", 7) == 0){
+	else if(is_dfu_cmd(buf) == 0){
+	    int dfu_status = -1;
+	    dfu_status = dfu_hook(buf);
+	}
+    else if (strncmp(buf, "qatperf", 7) == 0){
 		cmd_shell_exec(buf);
 	}
 	else if (strncmp(buf, "tx", 2) == 0){

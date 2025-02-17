@@ -140,8 +140,8 @@ void vTaskShell(void * p) {
 
 	cmd_shell_add("write", (void*)test_dfu_qcspi_write, "write [addr] [val]");
 	cmd_shell_add("read", (void*)test_dfu_qcspi_read, "read [addr]");
-	cmd_shell_add("boot", (void*)test_dfu_boot, "boot32 APP");
-	cmd_shell_add("reset", (void*)test_dfu_reset, "reset SBL");
+	cmd_shell_add("AT+DFUBOOT", (void*)test_dfu_boot, "boot32 APP");
+	cmd_shell_add("AT+DFURESET", (void*)test_dfu_reset, "reset SBL");
 	cmd_shell_add("AT+DFUAPP", (void*)test_dfu_app, "DFU APP");
 	cmd_shell_add("AT+DFUBDF", (void*)test_dfu_app, "DFU BDF");
 	while(1){

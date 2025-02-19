@@ -82,7 +82,7 @@ static uint8_t send_dfu_start_request(soft_id_t soft_id);
 static int32_t write_byte_to_target(uint32_t address, uint8_t* pdata);
 static void read_config_table_hdr(uint32_t* dword);
 static void set_target_st(target_state_e st);
-
+uint8_t dfu_boot_flag = 0;
 uint32_t get_spi_handle(void)
 {
     return spi_handle;
@@ -702,6 +702,7 @@ void send_dfu_boot(void)
         send_dfu_start_request(CMD_BOOT);
         set_target_st(TARGET_LOADING_APP);
     }
+	dfu_boot_flag = 1;
     //else
     {
         //dbg_log("target status is %d\r\n", target_st);

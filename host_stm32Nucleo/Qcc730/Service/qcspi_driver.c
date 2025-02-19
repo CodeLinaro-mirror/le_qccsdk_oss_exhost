@@ -567,6 +567,9 @@ static void qcspi_word_to_byte_big_endian_array(uint8_t * dst_buf, uint8_t *src_
 
 void qcspi_mutex_init(void)
 {
-	mutex_spi_drv = qc_osal_mutex_create();
-	assert(mutex_spi_drv);
+	if(mutex_spi_drv == NULL)
+	{
+		mutex_spi_drv = qc_osal_mutex_create();
+		assert(mutex_spi_drv);
+	}
 }

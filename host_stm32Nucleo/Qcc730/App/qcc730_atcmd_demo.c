@@ -33,6 +33,13 @@ typedef struct{
 } atcmd_mqtt_rx_test_t;
 
 typedef struct{
+	uint32_t interval;
+	uint32_t len;
+	uint32_t time;
+	uint32_t bytes;
+} atcmd_tx_test_t;
+
+typedef struct{
 	char * cmd;
 	int (* func)(int argc, char ** argv, char *orig_cmd);
 	char * description;
@@ -50,6 +57,9 @@ static atcmd_parser_func_t atcmd_parser_resp_func_list[ATCMD_PARSER_FUNC_LIST_MA
 static atcmd_parser_func_t atcmd_parser_evt_func_list[ATCMD_PARSER_FUNC_LIST_MAX_SIZE];
 
 atcmd_mqtt_rx_test_t *rx_mqtt_test_param = NULL;
+atcmd_tx_test_t *tx_test_param = NULL;
+uint8_t tx_quit = 0;
+uint8_t rx_quit = 0;
 uint8_t tx_test_start = 0;
 
 void qcc730_atcmd_send_handler(uint8_t *cmd, uint32_t len);
@@ -337,6 +347,72 @@ static void atcmd_demo_rx_mqtt(void)
 	qc_osal_thread_delete(NULL);
 }
 
+static void atcmd_demo_tx_loop(void)
+{
+	uint8_t *write_buf = malloc(tx_test_param->len);
+	uint32_t j = 0, packets_num = 0, runtime = 0;
+	uint32_t is_test_done = 0;
+	qc_osal_tick_type_t start;
+	qc_osal_tick_type_t end;
+
+	tx_quit = 0;
+	tx_test_start = 1;
+
+	srand(time(NULL));
+
+	for(j = 0; j < tx_test_param->len; j++)
+	{
+		write_buf[j]=(rand()%100)+1;
+	}
+
+    if (0 == qcspi_ring_init_flag)
+    {
+        qapi_spi_ring_init();
+        qcspi_ring_init_flag = 1;
+    }
+
+	start = qc_osal_get_ticks();
+	while (!is_test_done) {
+		if (tx_quit) {
+			is_test_done = 1;
+			break;
+		}
+		if ((tx_test_param->bytes > 0) && packets_num >= tx_test_param->bytes) {
+			is_test_done = 1;
+			break;
+		}
+		if ((tx_test_param->time > 0) && runtime >= tx_test_param->time) {
+			is_test_done = 1;
+			break;
+		}
+		if(qapi_atcmd_send(write_buf, tx_test_param->len)) {
+			printf("qapi_spi_ring_write error\r\n");
+		} else {
+			packets_num += tx_test_param->len;
+		}
+		if (tx_test_param->interval) {
+			qc_osal_task_delay(tx_test_param->interval/QC_OSAL_portTICK_PERIOD_MS);
+		}
+		end = qc_osal_get_ticks();
+		runtime = (end-start)*1000/configTICK_RATE_HZ;
+	}
+
+	tx_test_start = 0;
+
+	printf("tx speed = %d(bits/sec)\r\n", 1000 * (packets_num * 8)/runtime);
+
+	printf("send %d bits, time:%d ms\r\n", packets_num * 8, runtime);
+
+	memset(tx_test_param, 0, sizeof(atcmd_tx_test_t));
+
+	free(write_buf);
+
+	printf("delete thread\r\n");
+
+	qc_osal_thread_delete(NULL);
+
+}
+
 void atcmd_response_parser_RDMEM(int argc, uint32_t ** argv, char *orig_cmd)
 {
 	printf("Response after parsing +RDMEM:\r\n");
@@ -574,6 +650,53 @@ void qcc730_atcmd_send_handler(uint8_t *cmd, uint32_t len)
     qapi_atcmd_send(cmd, len);
 }
 
+int test_atcmd_tx_loop(int argc, char ** argv){
+	QC_OSAL_BaseType_t xReturned;
+	qc_osal_task_handle_t xHandle = NULL;
+	int index = 1;
+	int interval, length, time, bytes = 0;
+	if (argc < 2) {
+		demo_print("\nUsage: tx_loop [options]\r\n");
+		demo_print("  -i  = Sets the interval time in microseconds between periodic bandwidth\r\n");
+		demo_print("  -l = The length of buffers to read or write\r\n");
+		demo_print("  -t = The time in seconds to transmit for\r\n");
+		demo_print("  -n = The number of buffers to transmit(MB)\r\n");
+		demo_print("  stop = stop the transmit test\r\n");
+		return 0;
+	}
+	while (index < argc) {
+		if (0 == strcmp(argv[index], "-i")) {
+			sscanf(argv[++index],"%d",&tx_test_param->interval);
+			index++;
+		} else if (0 == strcmp(argv[index], "-l")) {
+			sscanf(argv[++index],"%d",&tx_test_param->len);
+			index++;
+		} else if (0 == strcmp(argv[index], "-t")) {
+			sscanf(argv[++index],"%d",&tx_test_param->time);
+			tx_test_param->time = tx_test_param->time * 1000;
+			index++;
+		} else if (0 == strcmp(argv[index], "-n")) {
+			sscanf(argv[++index],"%d",&tx_test_param->bytes);
+			tx_test_param->bytes = tx_test_param->bytes * 1024 * 1024;
+			index++;
+		} else if (0 == strcmp(argv[index], "stop")) {
+			tx_quit = 1;
+			rx_quit = 1;
+			return 0;
+		} else {
+			index++;
+		}
+	}
+
+	xReturned = qc_osal_thread_create(atcmd_demo_tx_loop, "atcmd_demo_tx_loop", 1024, NULL, 6, &xHandle);
+
+	if( xReturned == QC_OSAL_ERR_MEM_ALLOCATE_FAILED ) {
+		printf("Task Shell creation error: Could not allocate required memory\r\n");
+	}
+
+	return 0;
+}
+
 int test_atcmd_tx(int argc, char ** argv){
 	demo_print("tx test \r\n");
 	int cnt=0,size=0;
@@ -674,6 +797,7 @@ void vTaskShell(void * p) {
 	cmd_shell_add("qatperf", (void*)atcmd_qat_perf, "performance test");
 	cmd_shell_add("tx", (void*)test_atcmd_tx, "tx");
 	cmd_shell_add("rx_mqtt", (void*)test_atcmd_rx_mqtt, "rx_mqtt");
+	cmd_shell_add("tx_loop", (void*)test_atcmd_tx_loop, "tx stress test");
 	while(1){
 		cmd_shell_char_received();
 	}
@@ -714,6 +838,9 @@ void task_init_all(void)
 
 	rx_mqtt_test_param = malloc(sizeof(atcmd_mqtt_rx_test_t));
 	memset(rx_mqtt_test_param, 0, sizeof(atcmd_mqtt_rx_test_t));
+
+	tx_test_param = malloc(sizeof(atcmd_tx_test_t));
+	memset(tx_test_param, 0, sizeof(atcmd_tx_test_t));
 	
 	atcmd_add_command_parser();
 	atcmd_add_evt_parser();

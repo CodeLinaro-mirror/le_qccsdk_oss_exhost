@@ -54,6 +54,8 @@ uint8_t tx_test_start = 0;
 
 void qcc730_atcmd_send_handler(uint8_t *cmd, uint32_t len);
 
+extern uint8_t dfu_boot_flag;
+
 uint8_t atcmd_parser_exec_function_by_index(int argc, char * argv, char *original_cmd, int index, int flag)
 {
 	if(flag == QAT_RESP_TYPE)
@@ -556,6 +558,13 @@ void qcc730_atcmd_send_handler(uint8_t *cmd, uint32_t len)
 	    qcc_reset_flag = 1;
 	}
 
+	if(dfu_boot_flag == 1)
+	{
+		qapi_spi_init();	
+		qapi_spi_ring_init();
+
+		dfu_boot_flag = 0;
+	}
     if (QCC730_SPI_NOT_READY == qapi_atcmd_get_spi_state())
     {   
 	    if (QAPI_OK != qapi_spi_get_slaveid(&id))

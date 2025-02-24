@@ -651,6 +651,11 @@ static void recieve_and_process_dfu_frame(f2a_dfu_msg_id_t* p_msg_id)
             printf("\r\n+EVT:DFU_DATATRANSFERFAIL:msg_id:0x%x is not expected\n", p_msg_hdr->msg_id);
             break;
         }
+        if(NULL !=p_msg_hdr)
+        {
+            free(p_msg_hdr);
+            p_msg_hdr = NULL;
+        }
     }
 
 }

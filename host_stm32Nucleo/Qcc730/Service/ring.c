@@ -89,7 +89,7 @@ static int32_t sw_ring_wait_for_F2A(uint32_t handle, sw_ring_status_t* ringStatu
         {
             return RING_OK;
         }
-        else if(ret==0 && buffer_status_try_cnt>=SW_RING_STATUS_RETRY_LIMIT){
+        else if(ret==0){
         	//printf("sw_ring_wait_for_F2A no data \r\n");
         	//For interrupt mode, need improvement/enhancement
         	return RING_EMPTY;

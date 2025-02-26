@@ -632,6 +632,8 @@ void qcc730_atcmd_send_handler(uint8_t *cmd, uint32_t len)
 	if(strncasecmp(cmd, "AT+RST", 6) == 0)
 	{
 	    qcc_reset_flag = 1;
+	    //reset spi state
+	    atcmd_set_spi_state(QCC730_SPI_NOT_READY);
 	}
 
 	if(dfu_boot_flag == 1)
@@ -799,6 +801,21 @@ void atcmd_add_command_parser(void)
 	atcmd_parser_func_add("+RDMEM", (void*)atcmd_response_parser_RDMEM, "parse RDMEM response", QAT_RESP_TYPE);
 	atcmd_parser_func_add("+IPDHEX", (void*)atcmd_response_parser_IPDHEX, "parse +IPD response", QAT_RESP_TYPE);
 }
+
+int test_reset(int argc, char ** argv){
+    qc_hal_gpio_write(QC_CHIP_ON_Port, QC_CHIO_ON_Pin, QC_HAL_GPIO_PIN_RESET);
+    qc_hal_delay(30);
+    qc_hal_gpio_write(QC_CHIP_ON_Port, QC_CHIO_ON_Pin, QC_HAL_GPIO_PIN_SET);
+    qc_hal_delay(1000);
+    qc_hal_gpio_write(QC_CHIP_ON_Port, QC_CHIO_ON_Pin, QC_HAL_GPIO_PIN_RESET);
+    qc_hal_delay(30);
+    qc_hal_gpio_write(QC_CHIP_ON_Port, QC_CHIO_ON_Pin, QC_HAL_GPIO_PIN_SET);
+
+    qcc_reset_flag = 1;
+    //reset spi state
+    atcmd_set_spi_state(QCC730_SPI_NOT_READY);
+
+}
 void vTaskShell(void * p) {
 	cmd_shell_init(&(UART_DEVICE));
 	cmd_shell_add("help", (void*)atcmd_help, "AT Command help!");
@@ -807,6 +824,7 @@ void vTaskShell(void * p) {
 	cmd_shell_add("tx", (void*)test_atcmd_tx, "tx");
 	cmd_shell_add("rx_mqtt", (void*)test_atcmd_rx_mqtt, "rx_mqtt");
 	cmd_shell_add("tx_loop", (void*)test_atcmd_tx_loop, "tx stress test");
+	cmd_shell_add("reset", (void*)test_reset, "reset QCC730");
 	while(1){
 		cmd_shell_char_received();
 	}
@@ -855,7 +873,7 @@ void task_init_all(void)
 	atcmd_add_evt_parser();
 	
 	qapi_spi_init();	
-	qapi_spi_ring_init();
+	//qapi_spi_ring_init();
 	qapi_atcmd_init();
 	qapi_atcmd_set_recv_cb(qcc730_atcmd_recv_callback);
 }

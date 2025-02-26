@@ -5,6 +5,7 @@
 
 #include <stdint.h>
 #include <string.h>
+#include "qc_os_al.h"
 
 #ifndef _ATCMD_H_
 #define _ATCMD_H_

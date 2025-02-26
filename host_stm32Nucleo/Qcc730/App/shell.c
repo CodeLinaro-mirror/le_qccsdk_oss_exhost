@@ -12,7 +12,7 @@ typedef struct{
 } shell_func_t;
 
 
-#define SHELL_FUNC_LIST_MAX_SIZE 12
+#define SHELL_FUNC_LIST_MAX_SIZE 15
 #define SHELL_CMD_MAX_SIZE 32
 #define SHELL_ARGC_MAX 8
 #define SHELL_BUFFER_SIZE 1500
@@ -97,6 +97,9 @@ uint8_t cmd_shell_char_received() {
 #ifdef QCC730_ATCMD_ENABLE
     if (strncmp(buf, "help", 4) == 0) {        
 		cmd_shell_exec(buf);
+    }
+    else if (strncmp(buf, "reset", 5) == 0) {
+        cmd_shell_exec(buf);
     } 
 	else if (strncmp(buf, "parser", 6) == 0){
 		cmd_shell_exec(buf);

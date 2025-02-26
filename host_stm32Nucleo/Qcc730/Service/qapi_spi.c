@@ -6,6 +6,8 @@
 #include "ring.h"
 #include "qapi_spi.h"
 #include "qcspi_driver.h"
+#include "atcmd.h"
+#include "qapi_atcmd.h"
 
 #ifdef QCC730_ATCMD_ENABLE
 extern void atcmd_set_spi_ready(void);
@@ -85,7 +87,7 @@ int32_t qapi_spi_ring_init( void )
 #ifdef QCC730_ATCMD_ENABLE
     if (ret == 0)
     {
-        atcmd_set_spi_ready();
+        atcmd_set_spi_state(QCC730_SPI_READY);
     }
 #endif
     return ret;

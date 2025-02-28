@@ -38,7 +38,8 @@
 #define MAX_TRY 3
 #define RESET_DELAY pdMS_TO_TICKS(5000) //5s
 int qcc_reset_flag = 0;
-
+uint8_t dfu_boot_flag = 0;
+int qcc_state = TARGET_IN_SBL;
 
 typedef struct {
     soft_id_t id;
@@ -82,7 +83,7 @@ static uint8_t send_dfu_start_request(soft_id_t soft_id);
 static int32_t write_byte_to_target(uint32_t address, uint8_t* pdata);
 static void read_config_table_hdr(uint32_t* dword);
 static void set_target_st(target_state_e st);
-uint8_t dfu_boot_flag = 0;
+
 uint32_t get_spi_handle(void)
 {
     return spi_handle;
@@ -90,7 +91,7 @@ uint32_t get_spi_handle(void)
 
 target_state_e get_target_st(void)
 {
-	return target_st;
+    return target_st;
 }
 
 static void set_target_st(target_state_e st)
@@ -707,7 +708,7 @@ void send_dfu_boot(void)
         send_dfu_start_request(CMD_BOOT);
         set_target_st(TARGET_LOADING_APP);
     }
-	dfu_boot_flag = 1;
+    dfu_boot_flag = 1;
     //else
     {
         //dbg_log("target status is %d\r\n", target_st);
@@ -1084,73 +1085,84 @@ void vDFU_task(void *pvParameters)
     for (;;) {
         if (qc_osal_queue_msg_receive(xDFU_msg_queue, &rcv_msg, portMAX_DELAY) == pdPASS)
         {
-            dbg_log("rcv msg.id:%d\r\n", rcv_msg.id);
-            for(try_count = 0; try_count < MAX_TRY; try_count++)
-            {
-                extern void qcspi_init(void);
-                if(qcc_reset_flag == 1)
-                {
-                    qcspi_init();
-                    qcc_reset_flag = 0;
-                }
+            qcspi_init();
 
-                dfu_cfg.id = rcv_msg.id;
-                ring_status = init_dfu_ring();
-                if (RING_INIT_ENTERED_SBL == ring_status)
+            dbg_log("rcv msg.id:%d\r\n", rcv_msg.id);
+            if(TARGET_IN_APP == qcc_state)
+            {
+                printf("QCC in APP!\r\n");
+            }
+            else
+                {
+                for(try_count = 0; try_count < MAX_TRY; try_count++)
+                {
+                    extern void qcspi_init(void);
+                    if(qcc_reset_flag == 1)
+                    {
+                        qcspi_init();
+                        qcc_reset_flag = 0;
+                        qcc_state = TARGET_IN_SBL;
+                    }
+
+                    dfu_cfg.id = rcv_msg.id;
+                    ring_status = init_dfu_ring();
+                    if (RING_INIT_ENTERED_SBL == ring_status)
+                    {
+                        switch (rcv_msg.id)
+                        {
+                        case WLAN_IMG_ID:
+                            dbg_log("DFUAPP\r\n");
+                            register_dfu_func(read_flash);
+                            dfu_app(rcv_msg.fsize);
+
+                            break;
+                        case BDF_ID:
+                            dbg_log("DFUBDF\r\n");
+                            register_dfu_func(read_flash);
+                            dfu_bdf(rcv_msg.fsize);
+                            break;
+                        case CMD_BOOT:
+                            dbg_log("DFUBOOT\r\n");
+                            send_dfu_boot();
+                            printf("+DFUBOOT:OK\r\n");
+                            break;
+                        case CMD_RESET:
+                            dbg_log("DFURESET\r\n");
+                            send_dfu_reset();
+                            qcc_reset_flag = 1;
+                            qcc_state = TARGET_IN_SBL;
+                            printf("+DFURESET:OK\r\n");
+                            break;
+                        default:
+                            printf("Unknown ID:0x%x\r\n", rcv_msg.id);
+                            break;
+                        }
+                        break;
+                    }
+                    else
+                    {
+                        qc_osal_task_delay(RESET_DELAY);
+                    }
+                }
+                if (try_count >= MAX_TRY)
                 {
                     switch (rcv_msg.id)
                     {
                     case WLAN_IMG_ID:
-                        dbg_log("DFUAPP\r\n");
-                        register_dfu_func(read_flash);
-                        dfu_app(rcv_msg.fsize);
-
+                        printf("+DFUAPP:FAIL,");
                         break;
                     case BDF_ID:
-                        dbg_log("DFUBDF\r\n");
-                        register_dfu_func(read_flash);
-                        dfu_bdf(rcv_msg.fsize);
+                        printf("+DFUBDF:FAIL,");
                         break;
                     case CMD_BOOT:
-                        dbg_log("DFUBOOT\r\n");
-                        send_dfu_boot();
-                        printf("+DFUBOOT:OK\r\n");
+                        printf("+DFUBOOT:FAIL,");
                         break;
                     case CMD_RESET:
-                        dbg_log("DFURESET\r\n");
-                        send_dfu_reset();
-                        qcc_reset_flag = 1;
-                        printf("+DFURESET:OK\r\n");
-                        break;
-                    default:
-                        printf("Unknown ID:0x%x\r\n", rcv_msg.id);
+                        printf("+DFURESET:FAIL,");
                         break;
                     }
-                    break;
+                    printf("DFU RING INIT FAIL\r\n");
                 }
-                else
-                {
-                    qc_osal_task_delay(RESET_DELAY);
-                }
-            }
-            if (try_count >= MAX_TRY)
-            {
-                switch (rcv_msg.id)
-                {
-                case WLAN_IMG_ID:
-                    printf("+DFUAPP:FAIL,");
-                    break;
-                case BDF_ID:
-                    printf("+DFUBDF:FAIL,");
-                    break;
-                case CMD_BOOT:
-                    printf("+DFUBOOT:FAIL,");
-                    break;
-                case CMD_RESET:
-                    printf("+DFURESET:FAIL,");
-                    break;
-                }
-                printf("DFU RING INIT FAIL\r\n");
             }
 
         }

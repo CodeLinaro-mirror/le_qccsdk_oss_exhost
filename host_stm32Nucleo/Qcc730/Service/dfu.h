@@ -41,6 +41,7 @@ enum dfu_error_code
     DFU_ERR_MAX             = 0xff
 };
 
+extern int qcc_state;
 typedef enum target_state
 {
 WAITING_ONBOARD = 0,

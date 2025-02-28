@@ -21,6 +21,7 @@
 
 int qat_demo_parser_enable = 1;
 uint32_t qcspi_ring_init_flag = 0;
+extern int qcc_state;
 
 typedef struct{
 	int task_started;
@@ -628,12 +629,17 @@ void qcc730_atcmd_send_handler(uint8_t *cmd, uint32_t len)
     {
         return;
     }
-	
+	if(TARGET_IN_SBL == qcc_state)
+	{
+		printf("\r\nQCC in SBL!\r\n");
+		return;
+	}
 	if(strncasecmp(cmd, "AT+RST", 6) == 0)
 	{
 	    qcc_reset_flag = 1;
 	    //reset spi state
 	    atcmd_set_spi_state(QCC730_SPI_NOT_READY);
+	    qcc_state = TARGET_IN_SBL;
 	}
 
 	if(dfu_boot_flag == 1)
@@ -816,6 +822,8 @@ int test_reset(int argc, char ** argv){
     atcmd_set_spi_state(QCC730_SPI_NOT_READY);
 
 }
+
+
 void vTaskShell(void * p) {
 	cmd_shell_init(&(UART_DEVICE));
 	cmd_shell_add("help", (void*)atcmd_help, "AT Command help!");

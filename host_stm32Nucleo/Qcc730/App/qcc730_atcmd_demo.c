@@ -629,19 +629,25 @@ void qcc730_atcmd_send_handler(uint8_t *cmd, uint32_t len)
     {
         return;
     }
+#ifdef QCC730_DFU_SUPPORT
 	if(TARGET_IN_SBL == qcc_state)
 	{
 		printf("\r\nQCC in SBL!\r\n");
 		return;
 	}
+#endif
 	if(strncasecmp(cmd, "AT+RST", 6) == 0)
 	{
-	    qcc_reset_flag = 1;
+
 	    //reset spi state
 	    atcmd_set_spi_state(QCC730_SPI_NOT_READY);
+#ifdef QCC730_DFU_SUPPORT
+	    qcc_reset_flag = 1;
 	    qcc_state = TARGET_IN_SBL;
+#endif
 	}
 
+#ifdef QCC730_DFU_SUPPORT
 	if(dfu_boot_flag == 1)
 	{
 		qapi_spi_init();	
@@ -649,6 +655,8 @@ void qcc730_atcmd_send_handler(uint8_t *cmd, uint32_t len)
 
 		dfu_boot_flag = 0;
 	}
+#endif
+
     if (QCC730_SPI_NOT_READY == qapi_atcmd_get_spi_state())
     {   
 	    if (QAPI_OK != qapi_spi_get_slaveid(&id))
@@ -816,8 +824,9 @@ int test_reset(int argc, char ** argv){
     qc_hal_gpio_write(QC_CHIP_ON_Port, QC_CHIO_ON_Pin, QC_HAL_GPIO_PIN_RESET);
     qc_hal_delay(30);
     qc_hal_gpio_write(QC_CHIP_ON_Port, QC_CHIO_ON_Pin, QC_HAL_GPIO_PIN_SET);
-
+#ifdef QCC730_DFU_SUPPORT
     qcc_reset_flag = 1;
+#endif
     //reset spi state
     atcmd_set_spi_state(QCC730_SPI_NOT_READY);
 
@@ -857,6 +866,7 @@ void task_init_all(void)
 		printf("Task Shell creation error: Could not allocate required memory\r\n");
 	}
     
+#ifdef QCC730_DFU_SUPPORT
     xReturned = qc_osal_thread_create(
         vDFU_task,         /* Function that implements the task. */
         "DFU",            /* Text name for the task. */
@@ -867,6 +877,7 @@ void task_init_all(void)
     if( xReturned == QC_OSAL_ERR_MEM_ALLOCATE_FAILED ) {
         printf("Task DFU creation error\r\n");
     }
+#endif
 
 	memset(atcmd_parser_resp_func_list, 0, ATCMD_PARSER_FUNC_LIST_MAX_SIZE);
 	memset(atcmd_parser_evt_func_list, 0, ATCMD_PARSER_FUNC_LIST_MAX_SIZE);

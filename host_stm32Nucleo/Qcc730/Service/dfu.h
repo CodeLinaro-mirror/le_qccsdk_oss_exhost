@@ -5,6 +5,9 @@
 #ifndef TARGET_DFU_H
 #define TARGET_DFU_H
 
+#include "qcc730_config.h"
+#ifdef QCC730_DFU_SUPPORT
+
 #include "fermion_cmn_api.h"
 #include <stdint.h>
 #include <stdbool.h>
@@ -256,4 +259,5 @@ int dfu_hook(char* buf);
 void register_dfu_func(read_func_t func);
 void init_dfu_cfg(soft_id_t id, uint32_t size);
 
+#endif
 #endif /*TARGET_DFU_H*/

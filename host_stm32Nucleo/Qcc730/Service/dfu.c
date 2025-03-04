@@ -2,6 +2,8 @@
  * Copyright (c) Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
+#include "qcc730_config.h"
+#ifdef QCC730_DFU_SUPPORT
 #include <stddef.h>
 #include <assert.h>
 #include <stdbool.h>
@@ -31,6 +33,7 @@
 #define FERM_TABLE_HDR_PATTERN      (0xFE0DEFA)
 
 #define FERM_DFU_TABLE_ADDR 0x90000
+#define FERM_TABLE_ADDR_HOLDER   (0x000001f4)
 
 #define MAX_DFU_DATA_LEN (0x5F00) //23k
 #define BIN_ADDR_AT_FLASH 0x08040000
@@ -703,12 +706,28 @@ void send_dfu_reset(void)
 void send_dfu_boot(void)
 {
     dbg_log("in %s\r\n", __func__);
+#if 0
+    uint32_t magic = 0x0;
+    qcspi_write_addr_align(spi_handle, (uint16_t)4, (uint32_t)FERM_DFU_TABLE_ADDR, (uint8_t*)&magic);
+    qc_osal_task_delay(1000);
+    uint32_t magic_sbl = 0;
+	if(0 != qcspi_read_addr_align(spi_handle, sizeof(uint32_t), FERM_DFU_TABLE_ADDR, (uint8_t*)&magic_sbl))
+	{
+		printf("SPI not ready!\r\n");
+		return;
+	}
+	else
+	{
+		printf("magic_sbl:0x%x\r\n", magic_sbl);
+	}
+#endif
     //if(TARGET_IN_SBL == target_st || TARGET_DFU_ONGOING == target_st)
     {
         send_dfu_start_request(CMD_BOOT);
         set_target_st(TARGET_LOADING_APP);
     }
     dfu_boot_flag = 1;
+    qcc_state = TARGET_IN_APP;
     //else
     {
         //dbg_log("target status is %d\r\n", target_st);
@@ -988,6 +1007,36 @@ int dfu_hook(char* buf)
     //msg.func = NULL;
     int ret  = -1;
 
+    //check qcc state
+    qcspi_init();
+    uint32_t magic_sbl = 0;
+    uint32_t magic_app = 0;
+    if(0 != qcspi_read_addr_align(spi_handle, sizeof(uint32_t), FERM_DFU_TABLE_ADDR, (uint8_t*)&magic_sbl))
+    {
+    	printf("SPI not ready!\r\n");
+    	return status;
+    }
+    else
+    {
+    	printf("magic_sbl:0x%x\r\n", magic_sbl);
+    	if(FERM_SBL_ENTERED_PATTERN == magic_sbl)
+    	{
+    		qcc_state = TARGET_IN_SBL;
+    	}
+    	else
+    	{
+    		printf("QCC not in SBL, don't send DFU cmd!\r\n");
+    		//qcspi_read_addr_align(spi_handle, sizeof(uint32_t), FERM_TABLE_ADDR_HOLDER, (uint8_t*)&magic_app);
+    		//printf("magic_app:0x%x\r\n", magic_app);
+    		//if(FERM_TABLE_HDR_PATTERN == magic_app)
+    		{
+    			qcc_state = TARGET_IN_APP;
+    			printf("set QCC in APP!\r\n");
+    		}
+    		return status;
+    	}
+    }
+
     if(strncasecmp(buf, "AT+DFUBOOT", 10) == 0)
     {
         printf("\r\n+DFUBOOT:Handle DFUBOOT\r\n");
@@ -1169,3 +1218,4 @@ void vDFU_task(void *pvParameters)
     }
 }
 
+#endif

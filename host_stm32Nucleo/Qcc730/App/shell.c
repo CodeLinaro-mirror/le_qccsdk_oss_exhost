@@ -3,7 +3,10 @@
  * SPDX-License-Identifier: BSD-3-Clause-Clear
 */
 #include "shell.h"
+#include "qcc730_config.h"
+#ifdef QCC730_DFU_SUPPORT
 #include "dfu.h"
+#endif
 
 typedef struct{
 	char * cmd;
@@ -104,10 +107,12 @@ uint8_t cmd_shell_char_received() {
 	else if (strncmp(buf, "parser", 6) == 0){
 		cmd_shell_exec(buf);
 	}
+#ifdef QCC730_DFU_SUPPORT
 	else if(is_dfu_cmd(buf) == 0){
 	    int dfu_status = -1;
 	    dfu_status = dfu_hook(buf);
 	}
+#endif
     else if (strncmp(buf, "qatperf", 7) == 0){
 		cmd_shell_exec(buf);
 	}

@@ -818,11 +818,7 @@ void atcmd_add_command_parser(void)
 
 int test_reset(int argc, char ** argv){
     qc_hal_gpio_write(QC_CHIP_ON_Port, QC_CHIO_ON_Pin, QC_HAL_GPIO_PIN_RESET);
-    qc_hal_delay(30);
-    qc_hal_gpio_write(QC_CHIP_ON_Port, QC_CHIO_ON_Pin, QC_HAL_GPIO_PIN_SET);
-    qc_hal_delay(1000);
-    qc_hal_gpio_write(QC_CHIP_ON_Port, QC_CHIO_ON_Pin, QC_HAL_GPIO_PIN_RESET);
-    qc_hal_delay(30);
+    qc_hal_delay(7500);
     qc_hal_gpio_write(QC_CHIP_ON_Port, QC_CHIO_ON_Pin, QC_HAL_GPIO_PIN_SET);
 #ifdef QCC730_DFU_SUPPORT
     qcc_reset_flag = 1;
@@ -852,8 +848,10 @@ void task_init_all(void)
 	QC_OSAL_BaseType_t xReturned;
 	qc_osal_task_handle_t xHandle = NULL;
 
+	qapi_spi_init();
 	/* This will start ticks for OS based system*/
 	qc_hal_inc_tick();
+	qc_hal_gpio_write(QC_HAL_LED_GREEN_GPIO_Port, QC_HAL_LED_GREEN_Pin, QC_HAL_GPIO_PIN_SET);
 
 	xReturned = qc_osal_thread_create(
 			vTaskShell,      	/* Function that implements the task. */
@@ -891,7 +889,7 @@ void task_init_all(void)
 	atcmd_add_command_parser();
 	atcmd_add_evt_parser();
 	
-	qapi_spi_init();	
+
 	//qapi_spi_ring_init();
 	qapi_atcmd_init();
 	qapi_atcmd_set_recv_cb(qcc730_atcmd_recv_callback);

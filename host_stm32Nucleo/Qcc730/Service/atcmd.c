@@ -12,11 +12,11 @@
 
 qcc730_atcmd_t *qcc730_atcmd = NULL;
 
-void atcmd_set_spi_ready(void)
+void atcmd_set_spi_state(qcc730_spi_state state)
 {
     if (qcc730_atcmd)
     {
-        qcc730_atcmd->spi_state = QCC730_SPI_READY;
+        qcc730_atcmd->spi_state = state;
     }
 }
 

@@ -21,6 +21,7 @@
 
 int qat_demo_parser_enable = 1;
 uint32_t qcspi_ring_init_flag = 0;
+extern int qcc_state;
 
 typedef struct{
 	int task_started;
@@ -31,6 +32,13 @@ typedef struct{
 	uint32_t start_tick;
 	uint32_t end_tick;
 } atcmd_mqtt_rx_test_t;
+
+typedef struct{
+	uint32_t interval;
+	uint32_t len;
+	uint32_t time;
+	uint32_t bytes;
+} atcmd_tx_test_t;
 
 typedef struct{
 	char * cmd;
@@ -50,6 +58,9 @@ static atcmd_parser_func_t atcmd_parser_resp_func_list[ATCMD_PARSER_FUNC_LIST_MA
 static atcmd_parser_func_t atcmd_parser_evt_func_list[ATCMD_PARSER_FUNC_LIST_MAX_SIZE];
 
 atcmd_mqtt_rx_test_t *rx_mqtt_test_param = NULL;
+atcmd_tx_test_t *tx_test_param = NULL;
+uint8_t tx_quit = 0;
+uint8_t rx_quit = 0;
 uint8_t tx_test_start = 0;
 
 void qcc730_atcmd_send_handler(uint8_t *cmd, uint32_t len);
@@ -339,6 +350,72 @@ static void atcmd_demo_rx_mqtt(void)
 	qc_osal_thread_delete(NULL);
 }
 
+static void atcmd_demo_tx_loop(void)
+{
+	uint8_t *write_buf = malloc(tx_test_param->len);
+	uint32_t j = 0, packets_num = 0, runtime = 0;
+	uint32_t is_test_done = 0;
+	qc_osal_tick_type_t start;
+	qc_osal_tick_type_t end;
+
+	tx_quit = 0;
+	tx_test_start = 1;
+
+	srand(time(NULL));
+
+	for(j = 0; j < tx_test_param->len; j++)
+	{
+		write_buf[j]=(rand()%100)+1;
+	}
+
+    if (0 == qcspi_ring_init_flag)
+    {
+        qapi_spi_ring_init();
+        qcspi_ring_init_flag = 1;
+    }
+
+	start = qc_osal_get_ticks();
+	while (!is_test_done) {
+		if (tx_quit) {
+			is_test_done = 1;
+			break;
+		}
+		if ((tx_test_param->bytes > 0) && packets_num >= tx_test_param->bytes) {
+			is_test_done = 1;
+			break;
+		}
+		if ((tx_test_param->time > 0) && runtime >= tx_test_param->time) {
+			is_test_done = 1;
+			break;
+		}
+		if(qapi_atcmd_send(write_buf, tx_test_param->len)) {
+			printf("qapi_spi_ring_write error\r\n");
+		} else {
+			packets_num += tx_test_param->len;
+		}
+		if (tx_test_param->interval) {
+			qc_osal_task_delay(tx_test_param->interval/QC_OSAL_portTICK_PERIOD_MS);
+		}
+		end = qc_osal_get_ticks();
+		runtime = (end-start)*1000/configTICK_RATE_HZ;
+	}
+
+	tx_test_start = 0;
+
+	printf("tx speed = %d(bits/sec)\r\n", 1000 * (packets_num * 8)/runtime);
+
+	printf("send %d bits, time:%d ms\r\n", packets_num * 8, runtime);
+
+	memset(tx_test_param, 0, sizeof(atcmd_tx_test_t));
+
+	free(write_buf);
+
+	printf("delete thread\r\n");
+
+	qc_osal_thread_delete(NULL);
+
+}
+
 void atcmd_response_parser_RDMEM(int argc, uint32_t ** argv, char *orig_cmd)
 {
 	printf("Response after parsing +RDMEM:\r\n");
@@ -552,12 +629,25 @@ void qcc730_atcmd_send_handler(uint8_t *cmd, uint32_t len)
     {
         return;
     }
-	
+#ifdef QCC730_DFU_SUPPORT
+	if(TARGET_IN_SBL == qcc_state)
+	{
+		printf("\r\nQCC in SBL!\r\n");
+		return;
+	}
+#endif
 	if(strncasecmp(cmd, "AT+RST", 6) == 0)
 	{
+
+	    //reset spi state
+	    atcmd_set_spi_state(QCC730_SPI_NOT_READY);
+#ifdef QCC730_DFU_SUPPORT
 	    qcc_reset_flag = 1;
+	    qcc_state = TARGET_IN_SBL;
+#endif
 	}
 
+#ifdef QCC730_DFU_SUPPORT
 	if(dfu_boot_flag == 1)
 	{
 		qapi_spi_init();	
@@ -565,6 +655,8 @@ void qcc730_atcmd_send_handler(uint8_t *cmd, uint32_t len)
 
 		dfu_boot_flag = 0;
 	}
+#endif
+
     if (QCC730_SPI_NOT_READY == qapi_atcmd_get_spi_state())
     {   
 	    if (QAPI_OK != qapi_spi_get_slaveid(&id))
@@ -581,6 +673,53 @@ void qcc730_atcmd_send_handler(uint8_t *cmd, uint32_t len)
     }
 
     qapi_atcmd_send(cmd, len);
+}
+
+int test_atcmd_tx_loop(int argc, char ** argv){
+	QC_OSAL_BaseType_t xReturned;
+	qc_osal_task_handle_t xHandle = NULL;
+	int index = 1;
+	int interval, length, time, bytes = 0;
+	if (argc < 2) {
+		demo_print("\nUsage: tx_loop [options]\r\n");
+		demo_print("  -i  = Sets the interval time in microseconds between periodic bandwidth\r\n");
+		demo_print("  -l = The length of buffers to read or write\r\n");
+		demo_print("  -t = The time in seconds to transmit for\r\n");
+		demo_print("  -n = The number of buffers to transmit(MB)\r\n");
+		demo_print("  stop = stop the transmit test\r\n");
+		return 0;
+	}
+	while (index < argc) {
+		if (0 == strcmp(argv[index], "-i")) {
+			sscanf(argv[++index],"%d",&tx_test_param->interval);
+			index++;
+		} else if (0 == strcmp(argv[index], "-l")) {
+			sscanf(argv[++index],"%d",&tx_test_param->len);
+			index++;
+		} else if (0 == strcmp(argv[index], "-t")) {
+			sscanf(argv[++index],"%d",&tx_test_param->time);
+			tx_test_param->time = tx_test_param->time * 1000;
+			index++;
+		} else if (0 == strcmp(argv[index], "-n")) {
+			sscanf(argv[++index],"%d",&tx_test_param->bytes);
+			tx_test_param->bytes = tx_test_param->bytes * 1024 * 1024;
+			index++;
+		} else if (0 == strcmp(argv[index], "stop")) {
+			tx_quit = 1;
+			rx_quit = 1;
+			return 0;
+		} else {
+			index++;
+		}
+	}
+
+	xReturned = qc_osal_thread_create(atcmd_demo_tx_loop, "atcmd_demo_tx_loop", 1024, NULL, 6, &xHandle);
+
+	if( xReturned == QC_OSAL_ERR_MEM_ALLOCATE_FAILED ) {
+		printf("Task Shell creation error: Could not allocate required memory\r\n");
+	}
+
+	return 0;
 }
 
 int test_atcmd_tx(int argc, char ** argv){
@@ -676,6 +815,20 @@ void atcmd_add_command_parser(void)
 	atcmd_parser_func_add("+RDMEM", (void*)atcmd_response_parser_RDMEM, "parse RDMEM response", QAT_RESP_TYPE);
 	atcmd_parser_func_add("+IPDHEX", (void*)atcmd_response_parser_IPDHEX, "parse +IPD response", QAT_RESP_TYPE);
 }
+
+int test_reset(int argc, char ** argv){
+    qc_hal_gpio_write(QC_CHIP_ON_Port, QC_CHIO_ON_Pin, QC_HAL_GPIO_PIN_RESET);
+    qc_hal_delay(7500);
+    qc_hal_gpio_write(QC_CHIP_ON_Port, QC_CHIO_ON_Pin, QC_HAL_GPIO_PIN_SET);
+#ifdef QCC730_DFU_SUPPORT
+    qcc_reset_flag = 1;
+#endif
+    //reset spi state
+    atcmd_set_spi_state(QCC730_SPI_NOT_READY);
+
+}
+
+
 void vTaskShell(void * p) {
 	cmd_shell_init(&(UART_DEVICE));
 	cmd_shell_add("help", (void*)atcmd_help, "AT Command help!");
@@ -683,6 +836,8 @@ void vTaskShell(void * p) {
 	cmd_shell_add("qatperf", (void*)atcmd_qat_perf, "performance test");
 	cmd_shell_add("tx", (void*)test_atcmd_tx, "tx");
 	cmd_shell_add("rx_mqtt", (void*)test_atcmd_rx_mqtt, "rx_mqtt");
+	cmd_shell_add("tx_loop", (void*)test_atcmd_tx_loop, "tx stress test");
+	cmd_shell_add("reset", (void*)test_reset, "reset QCC730");
 	while(1){
 		cmd_shell_char_received();
 	}
@@ -693,8 +848,10 @@ void task_init_all(void)
 	QC_OSAL_BaseType_t xReturned;
 	qc_osal_task_handle_t xHandle = NULL;
 
+	qapi_spi_init();
 	/* This will start ticks for OS based system*/
 	qc_hal_inc_tick();
+	qc_hal_gpio_write(QC_HAL_LED_GREEN_GPIO_Port, QC_HAL_LED_GREEN_Pin, QC_HAL_GPIO_PIN_SET);
 
 	xReturned = qc_osal_thread_create(
 			vTaskShell,      	/* Function that implements the task. */
@@ -707,6 +864,7 @@ void task_init_all(void)
 		printf("Task Shell creation error: Could not allocate required memory\r\n");
 	}
     
+#ifdef QCC730_DFU_SUPPORT
     xReturned = qc_osal_thread_create(
         vDFU_task,         /* Function that implements the task. */
         "DFU",            /* Text name for the task. */
@@ -717,18 +875,22 @@ void task_init_all(void)
     if( xReturned == QC_OSAL_ERR_MEM_ALLOCATE_FAILED ) {
         printf("Task DFU creation error\r\n");
     }
+#endif
 
 	memset(atcmd_parser_resp_func_list, 0, ATCMD_PARSER_FUNC_LIST_MAX_SIZE);
 	memset(atcmd_parser_evt_func_list, 0, ATCMD_PARSER_FUNC_LIST_MAX_SIZE);
 
 	rx_mqtt_test_param = malloc(sizeof(atcmd_mqtt_rx_test_t));
 	memset(rx_mqtt_test_param, 0, sizeof(atcmd_mqtt_rx_test_t));
+
+	tx_test_param = malloc(sizeof(atcmd_tx_test_t));
+	memset(tx_test_param, 0, sizeof(atcmd_tx_test_t));
 	
 	atcmd_add_command_parser();
 	atcmd_add_evt_parser();
 	
-	qapi_spi_init();	
-	qapi_spi_ring_init();
+
+	//qapi_spi_ring_init();
 	qapi_atcmd_init();
 	qapi_atcmd_set_recv_cb(qcc730_atcmd_recv_callback);
 }

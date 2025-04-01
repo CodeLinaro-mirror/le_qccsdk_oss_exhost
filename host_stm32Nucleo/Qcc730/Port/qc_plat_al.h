@@ -53,6 +53,9 @@ typedef UART_HandleTypeDef QC_HAL_UART_HandleTypeDef;
 #define QC_HAL_GPIO_PIN_SET        GPIO_PIN_SET
 #define QC_HAL_GPIO_PIN_RESET      GPIO_PIN_RESET
 
+#define QC_CHIP_ON_Port             GPIOC
+#define QC_CHIO_ON_Pin              GPIO_PIN_7
+
 
 /*Platform minimum delay (in milliseconds)*/
 #define qc_hal_delay(x)	\

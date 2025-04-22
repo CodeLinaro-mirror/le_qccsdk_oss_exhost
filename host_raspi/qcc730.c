@@ -620,12 +620,10 @@ static void qcc730_ctrl_work(struct work_struct *work)
 {
     struct qcc730_device *qcc730 = container_of(work, struct qcc730_device, ctrl_work);
     
-    if (qcc730->state == QCC730_DEVICE_NOT_READY) {
+    if (qcc730->state != QCC730_WIFI_CONNECT) {
         if (qcc730_htc_init(qcc730) == 0)
             eth_hw_addr_set(qcc730->ndev, qcc730->mac_addr);
-    } else {
-		qcc730_spi_rd_wlan_state(qcc730);
-	}
+    } 
 
 	if (qcc730->state == QCC730_WIFI_CONNECT) {
             netif_wake_queue(qcc730->ndev);

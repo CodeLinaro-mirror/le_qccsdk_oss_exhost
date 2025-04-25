@@ -494,7 +494,13 @@ void atcmd_response_parser_EVT_MQTTSUBRECV(int argc, uint32_t ** argv, char *ori
 		rx_mqtt_test_param->start_tick = qc_osal_get_ticks();
 		
 }
-
+void atcmd_response_parser_EVT_OTAFWUP_FIN(int argc, uint32_t ** argv, char *orig_cmd)
+{
+	printf("OTAFWUP_FIN received, host will reset spi after 5s\r\n");
+	qc_osal_task_delay(5000/QC_OSAL_portTICK_PERIOD_MS);
+	//reset spi state
+	atcmd_set_spi_state(QCC730_SPI_NOT_READY);
+}
 void atcmd_response_parser_EVT_MQTTSUBRECVHEX(int argc, uint32_t ** argv, char *orig_cmd)
 {
 	int i = 0;
@@ -808,6 +814,7 @@ void atcmd_add_evt_parser(void)
 {
 	atcmd_parser_func_add("+EVT:MQTT_SUBRECV", (void*)atcmd_response_parser_EVT_MQTTSUBRECV, "parse EVT_MQTTSUBRECV response", QAT_EVT_TYPE);
 	atcmd_parser_func_add("+EVT:MQTT_SUBRECVHEX", (void*)atcmd_response_parser_EVT_MQTTSUBRECVHEX, "parse EVT_MQTTSUBRECVHEX response", QAT_EVT_TYPE);
+	atcmd_parser_func_add("+EVT:OTAFWUP_FIN", (void*)atcmd_response_parser_EVT_OTAFWUP_FIN, "parse EVT_OTAFWUP_FIN response", QAT_EVT_TYPE);
 }
 void atcmd_add_command_parser(void)
 {

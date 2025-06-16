@@ -18,6 +18,8 @@
 #define AT_RESPONSE_MAX  2048
 #define demo_print printf
 #define MAX_LOOP	1000000
+#define TEST_BUFFER_SIZE        1400
+
 
 int qat_demo_parser_enable = 1;
 uint32_t qcspi_ring_init_flag = 0;
@@ -62,6 +64,78 @@ atcmd_tx_test_t *tx_test_param = NULL;
 uint8_t tx_quit = 0;
 uint8_t rx_quit = 0;
 uint8_t tx_test_start = 0;
+
+//http test
+static int http_mode = -1;
+static int http_send_num_temp = 0;
+static int http_send_num = 0;
+static int http_send_num_max = 10;
+static int http_Range = 400;
+static int http_send_data_num_max = 10;
+static int http_send_data_num =0;
+static int http_cmd_wait_time = 500;  //ms
+static int http_data_wait_time = 500;  //ms
+
+typedef enum {
+	HTTP_TEST_MODEL_CHECK_DATA_LENGTH,
+	HTTP_TEST_MODEL_CHECK_DATA_LENGTH_AND_VALUE,
+	HTTP_TEST_MODEL_CHECK_BIG_DATA,
+	HTTP_TEST_MODEL_CHECK_BIG_DATA_ON_DATA_MODEL,
+}http_mode_t;
+/*--------------------------------------------------http test-------------------------------------------------------------
+httptest cmd is like:httptest argv1 argv2 argv3 ...
+         argv1: it's http_mode value, range [0-3]: 0 [CMD_MODEL]: send http get cmd and verify data length only. 
+                                                   1 [CMD_MODEL]: send http get cmd and verify data length and end value.
+                                                   2 [CMD_MODEL]: send big data to 730 when test http post/put.
+                                                   3 [DATA_MODEL]: send big data to 730 when test http post/put. 
+         argv2: when http_mode is 0, the range is [0-1], 0 means start with test_buf1, 1 means start with test_buf2
+                when http_mode is 1, the range is [0-3], 0 means start with test_buf3, 1 means start with test_buf4, and so on...
+                when http_mode is 2, it means wait time to send next test_buf after receiving the response ">" of last data
+                when http_mode is 3, it means the time interval between two data transmissions
+         argv3: try to test how many times, it means the times of sending http data test_buf on data model for one test_buf_cmd
+         
+         argv4: only use for http_mode 2,it means the time to wait, then send next cmd after receiving the response "ok" of last test_buf_cmd 
+         argv5: only use for http_mode 2,it means the times to send test_buf_cmd.
+
+   for example:
+   [used for AT+HTTPCLIENT, get operation]:
+                httptest 0 1 200: it means verify the data length, start with test_buf2, exect 200 times.
+                httptest 1 0 200: it means verify the data length and end value, start with test_buf3, exect 200 times.
+                
+    [used for AT+HTTPPOST/AT+HTTPPUT]:
+         [cmd model]:  httptest 2 5 9 10 20
+                       it means send test_buf_cmd 20 times, wait 10ms to send next cmd after receiving the response "ok" of last test_buf_cmd
+                       for one test_buf_cmd, it will send test_buf 9 times, wait 5ms to send next test_buf after receiving the response ">" of last data
+         [data model]: httptest 3 1000 200
+                       it means send httpdata test_buf 200 times on data model, the interval of 2 test_buf sent is 1000ms
+----------------------------------------------------------------------------------------------------------------*/
+char test_buf_cmd[] =   "AT+HTTPPOST=\"https://192.168.0.200/index.asp\",9000\r";
+// test data, the length is 1000
+char test_buf[] =   "1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890"
+                    "1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890"
+                    "1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890"
+                    "1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890"
+                    "1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890"
+                    "1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890"
+                    "1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890"
+                    "1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890"
+                    "1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890"
+                    "1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890\r";
+
+char test_buf1[] =   "AT+HTTPCLIENT=2,0,\"https://192.168.0.200/get_test_1200.txt\"\r";
+char test_buf2[] =   "AT+HTTPCLIENT=2,0,\"https://192.168.0.200/get_test_1400.txt\"\r";
+//Keep lengths consistent between the following Ranges with http_Range(400), also you can change http_Range value.
+char test_buf3[] =   "AT+HTTPCLIENT=2,0,\"https://192.168.0.200/get_test_1600.txt\",\"Range:bytes=0-399\"\r";
+char test_buf4[] =   "AT+HTTPCLIENT=2,0,\"https://192.168.0.200/get_test_1600.txt\",\"Range:bytes=400-799\"\r";
+char test_buf5[] =   "AT+HTTPCLIENT=2,0,\"https://192.168.0.200/get_test_1600.txt\",\"Range:bytes=800-1199\"\r";
+char test_buf6[] =   "AT+HTTPCLIENT=2,0,\"https://192.168.0.200/get_test_1600.txt\",\"Range:bytes=1200-1599\"\r";
+//you can change the data of following test buffer, keep consistent with your testing data
+char test_buf_end0[] =   "000";  // end value of the httpdata relative test_buf3
+char test_buf_end1[] =   "111";  // end value of the httpdata relative test_buf4
+char test_buf_end2[] =   "222";  // end value of the httpdata relative test_buf5
+char test_buf_end3[] =   "333";  // end value of the httpdata relative test_buf6
+/*-----------------------------------------------http test---------------------------------------------------------------*/
+
 
 void qcc730_atcmd_send_handler(uint8_t *cmd, uint32_t len);
 
@@ -777,6 +851,307 @@ int test_atcmd_rx_mqtt(int argc, char ** argv)
 	return 0;
 }
 
+int test_send_http_cmd(int index){
+
+    demo_print("send http cmd mode:%d,index:%d\r\n",http_mode,index);
+    if(http_mode == HTTP_TEST_MODEL_CHECK_DATA_LENGTH)
+    {
+       if(index%2 == 0)
+	   {
+		   qcc730_atcmd_send_handler(test_buf1, strlen(test_buf1));
+		   http_send_num_temp =0;
+	   }
+	   else
+	   {
+		   qcc730_atcmd_send_handler(test_buf2, strlen(test_buf2));
+		   http_send_num_temp =1;
+	   }
+    }
+    else if(http_mode == HTTP_TEST_MODEL_CHECK_DATA_LENGTH_AND_VALUE)
+    {
+       if(index%4 == 0)
+	   {
+		   qcc730_atcmd_send_handler(test_buf3, strlen(test_buf3));
+           http_send_num_temp =0;
+	   }
+	   else if(index%4 == 1)
+	   {
+		   qcc730_atcmd_send_handler(test_buf4, strlen(test_buf4));
+		   http_send_num_temp =1;
+	   }
+	   else if(index%4 == 2)
+	   {
+		   qcc730_atcmd_send_handler(test_buf5, strlen(test_buf5));
+		   http_send_num_temp =2;
+	   }
+	   else if(index%4 == 3)
+	   {
+		   qcc730_atcmd_send_handler(test_buf6, strlen(test_buf6));
+		   http_send_num_temp =3;
+	   }
+    }
+    else if(http_mode == HTTP_TEST_MODEL_CHECK_BIG_DATA)
+    {
+         qcc730_atcmd_send_handler(test_buf_cmd, strlen(test_buf_cmd));
+    }
+
+	return 0;
+}
+
+void test_http_process(uint8_t *data, uint32_t len){
+    int datalen = strlen(data);
+    if(len >=http_Range)
+    {
+        if(len != datalen)
+        {
+            demo_print("ERROR len %d is wrong!\r\n",datalen);
+        }
+
+        if((http_mode == HTTP_TEST_MODEL_CHECK_DATA_LENGTH_AND_VALUE) && (len == datalen))
+        {
+          int check_len = 0;
+          if(http_send_num_temp%4 ==0)
+          {
+             check_len = strlen(test_buf_end0);
+             if(check_len <= http_Range)
+             {
+                if((strncmp(data+http_Range-check_len, test_buf_end0, check_len) != 0))
+        	        demo_print("ERROR data1 is wrong!\r\n");
+             }
+             else
+             {
+                    demo_print("warning check data is invalid!\r\n");
+             }
+          }
+          else if(http_send_num_temp%4 ==1)
+          {
+             check_len = strlen(test_buf_end1);
+             if(check_len <= http_Range)
+             {
+        		 if((strncmp(data+http_Range-check_len, test_buf_end1, check_len) != 0))
+        		     demo_print("ERROR data2 is wrong!\r\n");
+             }
+             else
+             {
+                    demo_print("warning check data is invalid!\r\n");
+             }
+          }
+          else if(http_send_num_temp%4 ==2)
+          {
+             check_len = strlen(test_buf_end2);
+             if(check_len <= http_Range)
+             {
+        		 if((strncmp(data+http_Range-check_len, test_buf_end2, check_len) != 0))
+        			 demo_print("ERROR data3 is wrong!\r\n"); 
+             }
+             else
+             {
+                    demo_print("warning check data is invalid!\r\n");
+             }
+          }
+          else if(http_send_num_temp%4 ==3)
+          {
+             check_len = strlen(test_buf_end3);
+             if(check_len <= http_Range)
+             {
+        		 if((strncmp(data+http_Range-check_len, test_buf_end3, check_len) != 0))
+        			demo_print("ERROR data4 is wrong!\r\n");
+             }
+             else
+             {
+                    demo_print("warning check data is invalid!\r\n");
+             }
+          }
+        }
+    }
+
+    if(http_mode == HTTP_TEST_MODEL_CHECK_BIG_DATA && len <50)
+    {
+        if(strncmp(data, ">", 1) == 0)
+        {
+         if(http_send_data_num<http_send_data_num_max)
+         {
+             demo_print("try data, http_mode: %d,send_num_max: %d,send_num_total:%d,data send_num_max: %d,data send_num: %d,\r\n",
+             http_mode,http_send_num_max,http_send_num,http_send_data_num_max,http_send_data_num);
+             qc_hal_delay(http_data_wait_time);
+             qcc730_atcmd_send_handler(test_buf, strlen(test_buf));
+             http_send_data_num++;
+         }
+
+        }   
+        if(strncmp(data, "+HTTPC: size", 12) == 0)
+        {
+            printf("%s\r\n", data);
+        }
+
+        if(strncmp(data+2, "+HTTPCPOST: SEND OK", 19) == 0 || strncmp(data+2, "+HTTPCPUT: SEND OK", 18) == 0)
+        {
+            http_send_data_num = 0;
+            if(http_send_num <http_send_num_max)
+            {
+                printf("%s\r\n", data);
+
+                qc_hal_delay(http_data_wait_time);
+
+                demo_print("try cmd, http_mode:%d,send_cmd_max:%d,send_num:%d\r\n",
+                http_mode,http_send_num_max,http_send_num+1);
+
+                test_send_http_cmd(0);
+                http_send_num++;
+            }
+            else
+			{
+				http_mode = -1;
+                printf("%s\r\n", data);
+			}
+        }
+    }
+     
+    if((http_mode == HTTP_TEST_MODEL_CHECK_DATA_LENGTH|| http_mode == HTTP_TEST_MODEL_CHECK_DATA_LENGTH_AND_VALUE)
+      && len < 10 && (strncmp(data+2, "OK", 2) == 0))
+    {
+       if(http_send_num <http_send_num_max)
+       {
+           qc_hal_delay(http_cmd_wait_time);
+           
+           demo_print("try next, http_mode: %d,send_num: %d, send_num_total:%d, send_num_max: %d\r\n",
+            http_mode,http_send_num_temp+1,http_send_num,http_send_num_max);
+           
+    	   test_send_http_cmd(http_send_num_temp+1);
+    	   http_send_num++;
+
+       }
+       else
+       {
+    	   http_mode = -1;
+           printf("%s\r\n", data);
+       }
+    }
+
+}
+
+
+int test_http(int argc, char ** argv){
+    int num = 0;
+    int interval = http_data_wait_time;
+    http_mode = -1;
+    http_send_num_temp = 0;
+    http_send_num =0;
+    http_send_data_num =0;
+
+    if(argc>1)
+    {
+        http_mode = atoi(argv[1]);
+    }
+
+    if(http_mode==HTTP_TEST_MODEL_CHECK_DATA_LENGTH || http_mode==HTTP_TEST_MODEL_CHECK_DATA_LENGTH_AND_VALUE )
+    {
+        if(argc>2)
+        {
+            num = atoi(argv[2]);
+        }
+        if(argc>3)
+        {
+            http_send_num_max = atoi(argv[3]);
+        }
+
+        demo_print("httptest test_mode:%d,send_num_max:%d\r\n",http_mode,http_send_num_max);
+        if(http_mode == HTTP_TEST_MODEL_CHECK_DATA_LENGTH)
+        {
+            if(num == 0)
+            {
+               qcc730_atcmd_send_handler(test_buf1, strlen(test_buf1));
+            }
+            else
+            {
+               qcc730_atcmd_send_handler(test_buf2, strlen(test_buf2));
+            }
+        }
+        else if(http_mode == HTTP_TEST_MODEL_CHECK_DATA_LENGTH_AND_VALUE)
+        {
+           if(num == 0)
+           {
+               qcc730_atcmd_send_handler(test_buf3, strlen(test_buf3));
+               http_send_num_temp =0;
+           }
+           else if(num == 1)
+           {
+                qcc730_atcmd_send_handler(test_buf4, strlen(test_buf4));
+                http_send_num_temp =1;
+           }
+           else if(num == 2)
+           {
+                qcc730_atcmd_send_handler(test_buf5, strlen(test_buf5));
+                http_send_num_temp =2;
+           }
+           else if(num == 3)
+           {
+                qcc730_atcmd_send_handler(test_buf6, strlen(test_buf6));
+                http_send_num_temp =3;
+              }
+        }
+        http_send_num ++;
+    }
+    else if(http_mode==HTTP_TEST_MODEL_CHECK_BIG_DATA )
+    {
+        if(argc>2)
+        {
+            http_data_wait_time = atoi(argv[2]);
+        }
+        if(argc>3)
+        {
+            http_send_data_num_max = atoi(argv[3]);
+        }
+        if(argc>4)
+        {
+            http_cmd_wait_time = atoi(argv[4]);
+        }
+        if(argc>5)
+        {
+            http_send_num_max= atoi(argv[5]);
+        }
+
+        if(strlen(test_buf_cmd)<= TEST_BUFFER_SIZE)
+        {
+            demo_print("httptest test_mode:%d, send_cmd_max:%d, cmd wait time:%dms, data_max:%d,data wait time:%dms, send_num:%d\r\n",
+                http_mode,http_send_num_max,http_cmd_wait_time,http_send_data_num_max,http_data_wait_time,http_send_num+1);
+            qcc730_atcmd_send_handler(test_buf_cmd, strlen(test_buf_cmd));
+            http_send_num ++;
+        }
+        else
+        {
+            demo_print("error, test_buf_cmd lent:%d, it should not be bigger than %d\r\n",strlen(test_buf)-1,TEST_BUFFER_SIZE);
+        }
+    }
+    else if(http_mode==HTTP_TEST_MODEL_CHECK_BIG_DATA_ON_DATA_MODEL )
+    {
+        if(argc>1)
+        {
+            interval = atoi(argv[2]);
+        }
+        if(argc>2)
+        {
+            http_send_num_max = atoi(argv[3]);
+        }
+
+        demo_print("httptest test_mode:%d, send_num_max:%d, test_buf lent:%d, interval:%dms\r\n",http_mode,http_send_num_max,strlen(test_buf)-1,interval);
+
+        for(int i=0; i<http_send_num_max; i++)
+        {
+            demo_print("httptest num:%d\r\n",i+1);
+            qcc730_atcmd_send_handler(test_buf, strlen(test_buf));
+
+            if(i < http_send_num_max  -1)
+              qc_hal_delay(interval);
+        }
+        
+        http_mode = -1;
+    }
+
+	return 0;
+}
+
+
 void print_atcmd_resp(uint8_t *data, uint32_t len)
 {
     if (!strncmp(&data[2], "+CMD:", 5))
@@ -794,8 +1169,13 @@ void print_atcmd_resp(uint8_t *data, uint32_t len)
     {
         return;
     }
-	
-	printf("%s\r\n", data);	
+    if(http_mode != -1)
+    {
+        test_http_process(data,len);
+        return;
+    }
+
+    printf("%s\r\n", data);
 }
 
 void qcc730_atcmd_recv_callback(uint8_t *data, uint32_t len)
@@ -835,7 +1215,6 @@ int test_reset(int argc, char ** argv){
 
 }
 
-
 void vTaskShell(void * p) {
 	cmd_shell_init(&(UART_DEVICE));
 	cmd_shell_add("help", (void*)atcmd_help, "AT Command help!");
@@ -845,6 +1224,7 @@ void vTaskShell(void * p) {
 	cmd_shell_add("rx_mqtt", (void*)test_atcmd_rx_mqtt, "rx_mqtt");
 	cmd_shell_add("tx_loop", (void*)test_atcmd_tx_loop, "tx stress test");
 	cmd_shell_add("reset", (void*)test_reset, "reset QCC730");
+    cmd_shell_add("httptest", (void*)test_http, "http test");
 	while(1){
 		cmd_shell_char_received();
 	}

@@ -427,10 +427,11 @@ static void atcmd_demo_rx_mqtt(void)
 static void atcmd_demo_tx_loop(void)
 {
 	uint8_t *write_buf = malloc(tx_test_param->len);
-	uint32_t j = 0, packets_num = 0, runtime = 0;
+	uint32_t j = 0, packets_num = 0, packets_num_per_10s = 0, runtime = 0, runtime_per_10s = 0, count_per_10s = 0;
 	uint32_t is_test_done = 0;
-	qc_osal_tick_type_t start;
-	qc_osal_tick_type_t end;
+
+	qc_osal_tick_type_t start, start_per_10s, backoff_start;
+	qc_osal_tick_type_t end, end_per_10s;
 
 	tx_quit = 0;
 	tx_test_start = 1;
@@ -449,6 +450,7 @@ static void atcmd_demo_tx_loop(void)
     }
 
 	start = qc_osal_get_ticks();
+	start_per_10s = qc_osal_get_ticks();
 	while (!is_test_done) {
 		if (tx_quit) {
 			is_test_done = 1;
@@ -466,19 +468,29 @@ static void atcmd_demo_tx_loop(void)
 			printf("qapi_spi_ring_write error\r\n");
 		} else {
 			packets_num += tx_test_param->len;
+			packets_num_per_10s += tx_test_param->len;
 		}
 		if (tx_test_param->interval) {
 			qc_osal_task_delay(tx_test_param->interval/QC_OSAL_portTICK_PERIOD_MS);
 		}
 		end = qc_osal_get_ticks();
-		runtime = (end-start)*1000/configTICK_RATE_HZ;
+		end_per_10s = qc_osal_get_ticks();
+		runtime = (end-start)/configTICK_RATE_HZ;
+		runtime_per_10s = (end_per_10s-start_per_10s)/configTICK_RATE_HZ;
+		if(runtime_per_10s >= 10){
+			printf("tx speed = %d(bits/sec) for %ds-%ds\r\n", (packets_num_per_10s * 8)/runtime_per_10s, count_per_10s, count_per_10s+10);
+			count_per_10s+=10;
+			runtime_per_10s = 0;
+			packets_num_per_10s = 0;
+			end_per_10s = qc_osal_get_ticks();
+			start_per_10s = qc_osal_get_ticks();
+			test_over_10s = 1;
+		}
 	}
 
 	tx_test_start = 0;
 
-	printf("tx speed = %d(bits/sec)\r\n", 1000 * (packets_num * 8)/runtime);
-
-	printf("send %d bits, time:%d ms\r\n", packets_num * 8, runtime);
+	printf("tx speed = %d(bits/sec) for %ds-%ds\r\n", (packets_num_per_10s * 8)/runtime_per_10s, count_per_10s, count_per_10s+runtime_per_10s);
 
 	memset(tx_test_param, 0, sizeof(atcmd_tx_test_t));
 

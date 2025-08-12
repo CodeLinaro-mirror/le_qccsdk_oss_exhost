@@ -865,7 +865,7 @@ int test_atcmd_rx_mqtt(int argc, char ** argv)
 
 int test_send_http_cmd(int index){
 
-    demo_print("send http cmd mode:%d,index:%d\r\n",http_mode,index);
+    //demo_print("send http cmd mode:%d,index:%d\r\n",http_mode,index);
     if(http_mode == HTTP_TEST_MODEL_CHECK_DATA_LENGTH)
     {
        if(index%2 == 0)
@@ -983,8 +983,8 @@ void test_http_process(uint8_t *data, uint32_t len){
         {
          if(http_send_data_num<http_send_data_num_max)
          {
-             demo_print("try data, http_mode: %d,send_num_max: %d,send_num_total:%d,data send_num_max: %d,data send_num: %d,\r\n",
-             http_mode,http_send_num_max,http_send_num,http_send_data_num_max,http_send_data_num);
+             //demo_print("try data, http_mode: %d,send_num_max: %d,send_num_total:%d,data send_num_max: %d,data send_num: %d,\r\n",
+             //http_mode,http_send_num_max,http_send_num,http_send_data_num_max,http_send_data_num);
              qc_hal_delay(http_data_wait_time);
              qcc730_atcmd_send_handler(test_buf, strlen(test_buf));
              http_send_data_num++;
@@ -1003,10 +1003,10 @@ void test_http_process(uint8_t *data, uint32_t len){
             {
                 printf("%s\r\n", data);
 
-                qc_hal_delay(http_data_wait_time);
+                qc_hal_delay(http_cmd_wait_time);
 
-                demo_print("try cmd, http_mode:%d,send_cmd_max:%d,send_num:%d\r\n",
-                http_mode,http_send_num_max,http_send_num+1);
+                //demo_print("try cmd, http_mode:%d,send_cmd_max:%d,send_num:%d\r\n",
+                //http_mode,http_send_num_max,http_send_num+1);
 
                 test_send_http_cmd(0);
                 http_send_num++;

@@ -484,7 +484,6 @@ static void atcmd_demo_tx_loop(void)
 			packets_num_per_10s = 0;
 			end_per_10s = qc_osal_get_ticks();
 			start_per_10s = qc_osal_get_ticks();
-			test_over_10s = 1;
 		}
 	}
 

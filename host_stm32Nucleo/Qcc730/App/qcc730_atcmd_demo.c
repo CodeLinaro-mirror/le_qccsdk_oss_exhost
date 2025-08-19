@@ -996,7 +996,7 @@ void test_http_process(uint8_t *data, uint32_t len){
             printf("%s\r\n", data);
         }
 
-        if(strncmp(data+2, "+HTTPCPOST: SEND OK", 19) == 0 || strncmp(data+2, "+HTTPCPUT: SEND OK", 18) == 0)
+        if(strncmp(data+2, "+HTTPCPOST: SEND OK", 19) == 0 || strncmp(data+2, "+HTTPCPUT: SEND OK", 18) == 0 || strncmp(data+2, "+HTTPCPOST: SEND FAIL, timeout", 30) == 0)
         {
             http_send_data_num = 0;
             if(http_send_num <http_send_num_max)

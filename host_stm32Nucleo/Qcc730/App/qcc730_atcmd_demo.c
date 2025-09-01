@@ -19,7 +19,7 @@
 #define demo_print printf
 #define MAX_LOOP	1000000
 #define TEST_BUFFER_SIZE        1400
-
+#define ONE_GB_BYTES (1024UL*1024*1024UL)
 
 int qat_demo_parser_enable = 1;
 uint32_t qcspi_ring_init_flag = 0;
@@ -40,6 +40,7 @@ typedef struct{
 	uint32_t len;
 	uint32_t time;
 	uint32_t bytes;
+	uint32_t g_bytes;
 } atcmd_tx_test_t;
 
 typedef struct{
@@ -427,7 +428,7 @@ static void atcmd_demo_rx_mqtt(void)
 static void atcmd_demo_tx_loop(void)
 {
 	uint8_t *write_buf = malloc(tx_test_param->len);
-	uint32_t j = 0, packets_num = 0, packets_num_per_10s = 0, runtime = 0, runtime_per_10s = 0, count_per_10s = 0;
+	uint32_t j = 0, packets_num_gb = 0, packets_num_b = 0, packets_num_per_10s = 0, runtime = 0, runtime_per_10s = 0, count_per_10s = 0;
 	uint32_t is_test_done = 0;
 
 	qc_osal_tick_type_t start, start_per_10s, backoff_start;
@@ -456,34 +457,56 @@ static void atcmd_demo_tx_loop(void)
 			is_test_done = 1;
 			break;
 		}
-		if ((tx_test_param->bytes > 0) && packets_num >= tx_test_param->bytes) {
+
+		end = qc_osal_get_ticks();
+		runtime = (end-start)/configTICK_RATE_HZ;
+		if ((tx_test_param->time > 0) && runtime*1000 >= tx_test_param->time) {
 			is_test_done = 1;
 			break;
 		}
-		if ((tx_test_param->time > 0) && runtime >= tx_test_param->time) {
-			is_test_done = 1;
-			break;
-		}
+
+		// ---Data transmission ---
 		if(qapi_atcmd_send(write_buf, tx_test_param->len)) {
 			printf("qapi_spi_ring_write error\r\n");
 		} else {
-			packets_num += tx_test_param->len;
+			packets_num_b += tx_test_param->len;
 			packets_num_per_10s += tx_test_param->len;
+
+			// ---Handle GB rollover ---
+			if(packets_num_b >= ONE_GB_BYTES){
+				packets_num_gb++;
+				packets_num_b -= ONE_GB_BYTES;
+			}
 		}
-		if (tx_test_param->interval) {
-			qc_osal_task_delay(tx_test_param->interval/QC_OSAL_portTICK_PERIOD_MS);
+
+		if(tx_test_param->g_bytes > 0 || tx_test_param->bytes > 0){ // check only if a target is set
+			if(packets_num_gb > tx_test_param->g_bytes){
+				is_test_done = 1;
+				break;
+			} else if(packets_num_gb == tx_test_param->g_bytes){
+				if(packets_num_b >= tx_test_param->bytes){
+					is_test_done = 1;
+					break;
+				}
+			}
 		}
-		end = qc_osal_get_ticks();
+
 		end_per_10s = qc_osal_get_ticks();
-		runtime = (end-start)/configTICK_RATE_HZ;
 		runtime_per_10s = (end_per_10s-start_per_10s)/configTICK_RATE_HZ;
+
 		if(runtime_per_10s >= 10){
 			printf("tx speed = %d(bits/sec) for %ds-%ds\r\n", (packets_num_per_10s * 8)/runtime_per_10s, count_per_10s, count_per_10s+10);
+			printf("total bytes = %dG, %dB\r\n", packets_num_gb, packets_num_b);
 			count_per_10s+=10;
 			runtime_per_10s = 0;
 			packets_num_per_10s = 0;
 			end_per_10s = qc_osal_get_ticks();
 			start_per_10s = qc_osal_get_ticks();
+		}
+
+		//delay if specified
+		if (tx_test_param->interval) {
+			qc_osal_task_delay(tx_test_param->interval/QC_OSAL_portTICK_PERIOD_MS);
 		}
 	}
 
@@ -776,7 +799,8 @@ int test_atcmd_tx_loop(int argc, char ** argv){
 		demo_print("  -i  = Sets the interval time in microseconds between periodic bandwidth\r\n");
 		demo_print("  -l = The length of buffers to read or write\r\n");
 		demo_print("  -t = The time in seconds to transmit for\r\n");
-		demo_print("  -n = The number of buffers to transmit(MB)\r\n");
+		demo_print("  -m = The MB number to transmit, no more than 1024MB\r\n");
+		demo_print("  -g = The GB number to transmit\r\n");
 		demo_print("  stop = stop the transmit test\r\n");
 		return 0;
 	}
@@ -791,9 +815,16 @@ int test_atcmd_tx_loop(int argc, char ** argv){
 			sscanf(argv[++index],"%d",&tx_test_param->time);
 			tx_test_param->time = tx_test_param->time * 1000;
 			index++;
-		} else if (0 == strcmp(argv[index], "-n")) {
+		} else if (0 == strcmp(argv[index], "-m")) {
 			sscanf(argv[++index],"%d",&tx_test_param->bytes);
+			if(tx_test_param->bytes >= 1024){
+				demo_print("value larger than 1024 is not allowed -m, please use -g instead \r\n");
+				return 0;
+			}
 			tx_test_param->bytes = tx_test_param->bytes * 1024 * 1024;
+			index++;
+		} else if (0 == strcmp(argv[index], "-g")) {
+			sscanf(argv[++index],"%d",&tx_test_param->g_bytes);
 			index++;
 		} else if (0 == strcmp(argv[index], "stop")) {
 			tx_quit = 1;

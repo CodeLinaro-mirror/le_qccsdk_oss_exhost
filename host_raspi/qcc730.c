@@ -725,7 +725,6 @@ static void qcc730_rx(struct qcc730_device *qcc730)
 
         ret = qcc730_spi_ring_rd(qcc730, &skb->data[0], &skb_len, QCC730_SPI_DATA_RING_IDX, &skb_type);
         if (ret || skb_len > QCC730_MAX_MTU_LEN) {
-            printk(KERN_INFO "qcc730_spi_ring_rd ret = %d, skb_len = %d\n", ret, skb_len);
             break;
         }
 

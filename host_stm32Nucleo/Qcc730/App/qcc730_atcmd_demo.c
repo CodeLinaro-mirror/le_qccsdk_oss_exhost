@@ -1257,6 +1257,15 @@ int test_reset(int argc, char ** argv){
 
 }
 
+int atcmd_wakeup_qcc730(int argc, char ** argv)
+{
+	printf("wakeup QCC730\r\n");
+
+    qc_hal_gpio_write(QCC730_WAKEUP_GPIO_Port, QCC730_WAKEUP_Pin, QC_HAL_GPIO_PIN_RESET);
+	qc_hal_delay(300);
+	qc_hal_gpio_write(QCC730_WAKEUP_GPIO_Port, QCC730_WAKEUP_Pin, QC_HAL_GPIO_PIN_SET);
+}
+
 void vTaskShell(void * p) {
 	cmd_shell_init(&(UART_DEVICE));
 	cmd_shell_add("help", (void*)atcmd_help, "AT Command help!");
@@ -1267,6 +1276,7 @@ void vTaskShell(void * p) {
 	cmd_shell_add("tx_loop", (void*)test_atcmd_tx_loop, "tx stress test");
 	cmd_shell_add("reset", (void*)test_reset, "reset QCC730");
     cmd_shell_add("httptest", (void*)test_http, "http test");
+	cmd_shell_add("wakeup", (void*)atcmd_wakeup_qcc730, "wakeup QCC730 during power save mode");
 	while(1){
 		cmd_shell_char_received();
 	}

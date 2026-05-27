@@ -309,51 +309,56 @@ void atcmd_qat_perf(int argc, char ** argv)
 }
 
 static void atcmd_demo_tx(uint32_t num, uint32_t size)
-{
-	uint32_t j=0, k=0, count=0, remain=0;
-	uint8_t write_buf[1400]={0};
-	uint16_t info_type;
-	TickType_t currentTick = 0;
-	TickType_t endTick = 0;
+ {
+     uint32_t j=0, count=0;
+     uint16_t info_type;
+     TickType_t currentTick = 0;
+     TickType_t endTick = 0;
 
-	tx_test_start = 1;
-	
-	srand(time(NULL));
-	
-	for(j=0;j<sizeof(write_buf);j++)
-	{
-		write_buf[j]=(rand()%100)+1;
-	}
-	uint16_t buf_len = 0;
+     tx_test_start = 1;
 
-	
-    if (0 == qcspi_ring_init_flag)
-    {   
-    	qapi_spi_ring_init();
-        qcspi_ring_init_flag = 1;
-    }
-	
-	count = (num==0 || num>MAX_LOOP)? 10:num;
-	buf_len = (size==0 || size>1400)? 1400:size;
+     srand(time(NULL));
 
-	qc_osal_tick_type_t start = qc_osal_get_ticks();
-	
-	for(j=0;j<count;j++)
-	{
-		if(qapi_atcmd_send(write_buf, buf_len))
-			printf("qapi_spi_ring_write error\r\n");
-	}
-	
-	qc_osal_tick_type_t end = qc_osal_get_ticks();
+     count = (num==0 || num>MAX_LOOP)? 10:num;
+     uint16_t buf_len = size;
 
-	//qc_osal_task_delay(5000/QC_OSAL_portTICK_PERIOD_MS);
-	
-	printf("tx speed = %d(bits/sec)\r\n", (count*buf_len*8)*1000/(end-start));
-	
-	printf("send %d bits time:[now]=%d,start=%d, take ticks = %d, interval:%d ms\r\n", count*buf_len*8,end, start, end-start, ((end-start)*1000/configTICK_RATE_HZ));
+     uint8_t *write_buf = (uint8_t *)malloc(buf_len);
+     if (write_buf == NULL)
+     {
+         printf("malloc failed\r\n");
+         tx_test_start = 0;
+         return;
+     }
 
-	tx_test_start = 0;
-}
+     for(j=0; j<buf_len; j++)
+     {
+         write_buf[j] = (rand()%100)+1;
+     }
+
+     if (0 == qcspi_ring_init_flag)
+     {
+         qapi_spi_ring_init();
+         qcspi_ring_init_flag = 1;
+     }
+
+     qc_osal_tick_type_t start = qc_osal_get_ticks();
+
+     for(j=0; j<count; j++)
+     {
+         if(qapi_atcmd_send(write_buf, buf_len))
+             printf("qapi_spi_ring_write error\r\n");
+     }
+
+     qc_osal_tick_type_t end = qc_osal_get_ticks();
+
+     printf("tx speed = %d(bits/sec)\r\n", (count*buf_len*8)*1000/(end-start));
+     printf("send %d bits time:[now]=%d,start=%d, take ticks = %d, interval:%d ms\r\n",
+            count*buf_len*8, end, start, end-start,
+            ((end-start)*1000/configTICK_RATE_HZ));
+
+     free(write_buf);
+     tx_test_start = 0;
+ }
 
 uint32_t obtain_mqtt_pub_recv_count(void)
 {
@@ -1257,6 +1262,15 @@ int test_reset(int argc, char ** argv){
 
 }
 
+int atcmd_wakeup_qcc730(int argc, char ** argv)
+{
+	printf("wakeup QCC730\r\n");
+
+    qc_hal_gpio_write(QCC730_WAKEUP_GPIO_Port, QCC730_WAKEUP_Pin, QC_HAL_GPIO_PIN_RESET);
+	qc_hal_delay(300);
+	qc_hal_gpio_write(QCC730_WAKEUP_GPIO_Port, QCC730_WAKEUP_Pin, QC_HAL_GPIO_PIN_SET);
+}
+
 void vTaskShell(void * p) {
 	cmd_shell_init(&(UART_DEVICE));
 	cmd_shell_add("help", (void*)atcmd_help, "AT Command help!");
@@ -1267,6 +1281,7 @@ void vTaskShell(void * p) {
 	cmd_shell_add("tx_loop", (void*)test_atcmd_tx_loop, "tx stress test");
 	cmd_shell_add("reset", (void*)test_reset, "reset QCC730");
     cmd_shell_add("httptest", (void*)test_http, "http test");
+	cmd_shell_add("wakeup", (void*)atcmd_wakeup_qcc730, "wakeup QCC730 during power save mode");
 	while(1){
 		cmd_shell_char_received();
 	}

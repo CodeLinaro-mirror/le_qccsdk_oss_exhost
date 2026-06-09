@@ -70,7 +70,7 @@ uint8_t cmd_shell_init(QC_HAL_UART_HandleTypeDef* huart) {
 #endif
 //	cmd_shell_add("Eg:", (void *)cmd_sh_example, "Example");
 
-	qShell = qc_osal_queue_create(1,sizeof(char));
+	qShell = qc_osal_queue_create(15,sizeof(char));
 
 	if(QC_HAL_OK != QC_HAL_UART_Receive_IT(shell_huart, (uint8_t*)&c, 1)){
 		return 1;

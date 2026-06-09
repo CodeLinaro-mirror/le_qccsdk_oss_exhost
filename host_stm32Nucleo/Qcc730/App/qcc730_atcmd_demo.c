@@ -1267,7 +1267,7 @@ int atcmd_wakeup_qcc730(int argc, char ** argv)
 	printf("wakeup QCC730\r\n");
 
     qc_hal_gpio_write(QCC730_WAKEUP_GPIO_Port, QCC730_WAKEUP_Pin, QC_HAL_GPIO_PIN_RESET);
-	qc_hal_delay(300);
+	qc_hal_delay(100);
 	qc_hal_gpio_write(QCC730_WAKEUP_GPIO_Port, QCC730_WAKEUP_Pin, QC_HAL_GPIO_PIN_SET);
 }
 

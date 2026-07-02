@@ -250,7 +250,7 @@ static int32_t sw_ring_F2A_space_check(uint32_t handle, sw_ring_status_t* ringSt
         (ringStatus->numelems == 0))
     {
         RING_LOG("sw_ring_F2A_space_check corrputed, in=%d out=%d num=%d\r\n", ringStatus->index,ringStatus->outdex,ringStatus->numelems );
-//        SW_RING_ASSERT_OR_RETURN(-2);
+        return -2;
     }
 
     if (ringStatus->index == ringStatus->outdex)

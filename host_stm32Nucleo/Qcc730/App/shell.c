@@ -128,6 +128,9 @@ uint8_t cmd_shell_char_received() {
 	else if (strncmp(buf, "wakeup", 6) == 0){
 		cmd_shell_exec(buf);
 	}
+	else if (strncmp(buf, "bmps_stress", 11) == 0){
+		cmd_shell_exec(buf);
+	}
 	else if (buf[0] != '\r') {
 	    buf[pos++] = '\r';
     	extern void qcc730_atcmd_send_handler(uint8_t *cmd, uint32_t len);

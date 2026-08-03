@@ -1225,12 +1225,59 @@ void print_atcmd_resp(uint8_t *data, uint32_t len)
     printf("%s\r\n", data);
 }
 
+static volatile int bmps_stress_active = 0;
+static uint32_t bmps_stress_count = 0;
+static uint32_t bmps_stress_err = 0;
+static uint32_t bmps_stress_max = 0;
+static SemaphoreHandle_t bmps_stress_sem = NULL;
+
 void qcc730_atcmd_recv_callback(uint8_t *data, uint32_t len)
 {    
 	if(rx_mqtt_test_param->task_started == 0)
 		print_atcmd_resp(data, len);
 	if(qat_demo_parser_enable == 1)
 		atcmd_response_handler(len, data);
+	if (bmps_stress_active && bmps_stress_sem) {
+		if (strstr((char *)data, "+EVT:wakeup") != NULL ||
+		    strstr((char *)data, "OK") != NULL ||
+		    strstr((char *)data, "ERROR") != NULL) {
+			xSemaphoreGive(bmps_stress_sem);
+		}
+	}
+}
+
+static void bmps_stress_task(void *arg)
+{
+    printf("BMPS stress started, max=%u\r\n", bmps_stress_max);
+
+    while (bmps_stress_count < bmps_stress_max) {
+        bmps_stress_count++;
+
+        /* Send AT+PSENABLE=1 and wait response */
+        qcc730_atcmd_send_handler((uint8_t *)"AT+PSENABLE=1\r", 14);
+        if (pdTRUE != xSemaphoreTake(bmps_stress_sem, pdMS_TO_TICKS(3000))) {
+            printf("[%u] PSENABLE timeout, err=%u\r\n", bmps_stress_count, ++bmps_stress_err);
+        }
+
+        /* Wait 6s for BMPS sleep */
+        qc_hal_delay(6000);
+
+        /* Wakeup 730 and wait +EVT:wakeup */
+        atcmd_wakeup_qcc730(0, NULL);
+        if (pdTRUE != xSemaphoreTake(bmps_stress_sem, pdMS_TO_TICKS(3000))) {
+            printf("[%u] EVT timeout, err=%u\r\n", bmps_stress_count, ++bmps_stress_err);
+        }
+
+        /* Wait for 730 to finish POST_AWAKE processing before sending next command */
+        qc_hal_delay(5);
+
+        if ((bmps_stress_count % 100) == 0)
+            printf("[%u] ok, err=%u\r\n", bmps_stress_count, bmps_stress_err);
+    }
+
+    printf("BMPS stress done, count=%u err=%u\r\n", bmps_stress_count, bmps_stress_err);
+    bmps_stress_active = 0;
+    vTaskDelete(NULL);
 }
 
 #ifdef SHELL_FEATURE
@@ -1267,8 +1314,29 @@ int atcmd_wakeup_qcc730(int argc, char ** argv)
 	printf("wakeup QCC730\r\n");
 
     qc_hal_gpio_write(QCC730_WAKEUP_GPIO_Port, QCC730_WAKEUP_Pin, QC_HAL_GPIO_PIN_RESET);
-	qc_hal_delay(300);
+	qc_hal_delay(100);
 	qc_hal_gpio_write(QCC730_WAKEUP_GPIO_Port, QCC730_WAKEUP_Pin, QC_HAL_GPIO_PIN_SET);
+}
+
+int atcmd_bmps_stress(int argc, char ** argv)
+{
+    if (bmps_stress_active) {
+        printf("BMPS stress already running\r\n");
+        return 0;
+    }
+
+    bmps_stress_max = 1000;
+    if (argc > 1)
+        bmps_stress_max = atoi(argv[1]);
+
+    bmps_stress_active = 1;
+    bmps_stress_count = 0;
+    bmps_stress_err = 0;
+    if (!bmps_stress_sem)
+        bmps_stress_sem = xSemaphoreCreateBinary();
+    qc_osal_thread_create(bmps_stress_task, "bmps_stress", 1024 * 2, NULL,
+                          QC_OSAL_tskIDLE_PRIORITY + 3, NULL);
+    return 0;
 }
 
 void vTaskShell(void * p) {
@@ -1282,6 +1350,7 @@ void vTaskShell(void * p) {
 	cmd_shell_add("reset", (void*)test_reset, "reset QCC730");
     cmd_shell_add("httptest", (void*)test_http, "http test");
 	cmd_shell_add("wakeup", (void*)atcmd_wakeup_qcc730, "wakeup QCC730 during power save mode");
+	cmd_shell_add("bmps_stress", (void*)atcmd_bmps_stress, "BMPS stress test");
 	while(1){
 		cmd_shell_char_received();
 	}

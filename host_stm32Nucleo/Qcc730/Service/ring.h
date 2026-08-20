@@ -65,6 +65,9 @@ typedef struct sw_ring_element{
     uint32_t buf_addr; /* Pointer to Fermion memory buffer*/
     uint16_t len;  /* Length of the packet */
     uint16_t info; /* Info describing the packet type*/
+    /* Scratch buff */
+	void *p_buf_start; /* Start of the buf used for freeing, added to keep consistent with QCC730 structure definition */
+
 } sw_ring_element_t;
 
 typedef struct sw_ring_status {
